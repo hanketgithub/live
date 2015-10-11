@@ -165,8 +165,9 @@ void StreamParser::afterGettingBytes(void* clientData,
 				     unsigned numBytesRead,
 				     unsigned /*numTruncatedBytes*/,
 				     struct timeval presentationTime,
-				     unsigned /*durationInMicroseconds*/){
-  StreamParser* parser = (StreamParser*)clientData;
+				     unsigned /*durationInMicroseconds*/)
+{
+  StreamParser *parser = (StreamParser *) clientData;
   if (parser != NULL) parser->afterGettingBytes1(numBytesRead, presentationTime);
 }
 
