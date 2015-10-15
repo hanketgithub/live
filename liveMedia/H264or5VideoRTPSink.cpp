@@ -224,19 +224,28 @@ void H264or5Fragmenter::doGetNextFrame()
         }
         
         fLastFragmentCompletedNALUnit = True; // by default
+        
         if (fCurDataOffset == 1)
-        { // case 1 or 2
+        {   
+        	// case 1 or 2
             if (fNumValidDataBytes - 1 <= fMaxSize)
-            {   // case 1
+            {   
+            	// case 1
+				printf("H264or5Fragmenter::%s case1\n", __FUNCTION__);
+				
                 memmove(fTo, &fInputBuffer[1], fNumValidDataBytes - 1);
                 fFrameSize = fNumValidDataBytes - 1;
                 fCurDataOffset = fNumValidDataBytes;
             }
             else
-            {   // case 2
+            {
+            	// case 2
                 // We need to send the NAL unit data as FU packets.  Deliver the first
                 // packet now.  Note that we add "NAL header" and "FU header" bytes to the front
                 // of the packet (overwriting the existing "NAL header").
+
+				printf("H264or5Fragmenter::%s case2\n", __FUNCTION__);
+
                 if (fHNumber == 264)
                 {
                     fInputBuffer[0] = (fInputBuffer[1] & 0xE0) | 28; // FU indicator
@@ -244,8 +253,8 @@ void H264or5Fragmenter::doGetNextFrame()
                 }
                 else
                 {   // 265
-                    u_int8_t nal_unit_type = (fInputBuffer[1]&0x7E)>>1;
-                    fInputBuffer[0] = (fInputBuffer[1] & 0x81) | (49<<1); // Payload header (1st byte)
+                    u_int8_t nal_unit_type = (fInputBuffer[1] & 0x7E) >> 1;
+                    fInputBuffer[0] = (fInputBuffer[1] & 0x81) | (49 << 1); // Payload header (1st byte)
                     fInputBuffer[1] = fInputBuffer[2]; // Payload header (2nd byte)
                     fInputBuffer[2] = 0x80 | nal_unit_type; // FU header (with S bit)
                 }
@@ -256,14 +265,18 @@ void H264or5Fragmenter::doGetNextFrame()
             }
         }
         else
-        {   // case 3
+        {
+        	// case 3
             // We are sending this NAL unit data as FU packets.  We've already sent the
             // first packet (fragment).  Now, send the next fragment.  Note that we add
             // "NAL header" and "FU header" bytes to the front.  (We reuse these bytes that
             // we already sent for the first fragment, but clear the S bit, and add the E
             // bit if this is the last fragment.)
             unsigned numExtraHeaderBytes;
-            if (fHNumber == 264)
+
+			printf("H264or5Fragmenter::%s case3\n", __FUNCTION__);
+
+			if (fHNumber == 264)
             {
                 fInputBuffer[fCurDataOffset-2] = fInputBuffer[0]; // FU indicator
                 fInputBuffer[fCurDataOffset-1] = fInputBuffer[1]&~0x80; // FU header (no S bit)
@@ -276,7 +289,9 @@ void H264or5Fragmenter::doGetNextFrame()
                 fInputBuffer[fCurDataOffset-1] = fInputBuffer[2]&~0x80; // FU header (no S bit)
                 numExtraHeaderBytes = 3;
             }
+			
             unsigned numBytesToSend = numExtraHeaderBytes + (fNumValidDataBytes - fCurDataOffset);
+
             if (numBytesToSend > fMaxSize)
             {
                 // We can't send all of the remaining data this time:
@@ -290,7 +305,7 @@ void H264or5Fragmenter::doGetNextFrame()
                 fNumTruncatedBytes = fSaveNumTruncatedBytes;
             }
             
-            memmove(fTo, &fInputBuffer[fCurDataOffset-numExtraHeaderBytes], numBytesToSend);
+            memmove(fTo, &fInputBuffer[fCurDataOffset - numExtraHeaderBytes], numBytesToSend);
             fFrameSize = numBytesToSend;
             fCurDataOffset += numBytesToSend - numExtraHeaderBytes;
         }

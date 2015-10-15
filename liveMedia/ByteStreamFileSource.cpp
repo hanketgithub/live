@@ -21,6 +21,8 @@
 #include "ByteStreamFileSource.hh"
 #include "InputFile.hh"
 #include "GroupsockHelper.hh"
+#include "m31_hvc_api/HVC_types.h"
+#include "m31_hvc_api/HVC_encoder.h"
 
 ////////// ByteStreamFileSource //////////
 
@@ -156,7 +158,42 @@ void ByteStreamFileSource::doReadFromFile()
 #else
     if (fFidIsSeekable)
     {
-        fFrameSize = fread(fTo, 1, fMaxSize, fFid);
+    	// Hank: HVC Pop here!
+        //fFrameSize = fread(fTo, 1, fMaxSize, fFid);
+        while (1)
+        {
+	        API_HVC_RET ret;
+	        API_HVC_HEVC_CODED_PICT_T pic;
+	        
+	        ret = API_HVC_RET_SUCCESS;
+	        memset(&pic, 0, sizeof(pic));
+	        
+	        ret = HVC_ENC_PopES(API_HVC_BOARD_1, API_HVC_CHN_1, &pic);
+	        if (ret == API_HVC_RET_EMPTY)
+	        {
+	            fputc('.', stderr);
+	        }
+	        else
+	        {
+	            uint32_t j;
+				uint8_t *p;
+
+				p = fTo;
+				
+	            fprintf(stderr, "\nPop %d frame, last=%d pts=%d ", pic.eFrameType, pic.bLastES, pic.u32pts);
+	            
+	            for (j = 0; j < pic.u32NalNum; j++)
+	            {
+					memcpy(p, pic.tNalInfo[j].pu8Addr, pic.tNalInfo[j].u32Length);
+					p += pic.tNalInfo[j].u32Length;
+					
+	                fprintf(stderr, "NalType=%d ", pic.tNalInfo[j].eNalType);
+	            }
+				fFrameSize = p - fTo;
+	            fprintf(stderr, "\n");
+				break;
+	        }
+        }
     }
     else
     {
