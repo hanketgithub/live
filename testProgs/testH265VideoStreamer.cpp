@@ -37,8 +37,6 @@
 #include "m31_hvc_api/HVC_encoder.h"
 
 
-#define HARD_CODE_FRAME_SIZE	(1920 * 1080 * 3 / 2)
-
 typedef struct
 {
     API_HVC_BOARD_E eBoard;
@@ -49,7 +47,7 @@ typedef struct
 
 
 UsageEnvironment* env;
-char const* inputFileName = "test.265";
+char const* inputFileName = "test.yuv";
 H265VideoStreamFramer* videoSource;
 RTPSink* videoSink;
 
@@ -140,10 +138,12 @@ void *vraw_file_read(void *thread_param_p)
         free(vraw_data_buf_p);
     }
 
+    fprintf(stderr, "%s finished!\n", __FUNCTION__);
+
     return NULL;
 }
 
-int main(int argc, char** argv)
+int main(int argc, char *argv[])
 {
     // Begin by setting up our usage environment:
     TaskScheduler* scheduler = BasicTaskScheduler::createNew();
@@ -201,6 +201,16 @@ int main(int argc, char** argv)
     *env << "Play this stream using the URL \"" << url << "\"\n";
     delete[] url;
 
+    if (argc < 3)
+    {
+        fprintf(stderr, "useage: %s [width] [height]\n", argv[0]);
+        
+        return -1;
+    }
+
+    int wxh;
+
+    wxh = atoi(argv[1]) * atoi(argv[2]) * 3 / 2;
 
     HVC_ENC_PrintVersion(eBoard);
 
@@ -208,12 +218,12 @@ int main(int argc, char** argv)
     tApiHvcInitParam.eProfile   	= API_HVC_HEVC_MAIN_PROFILE;
     tApiHvcInitParam.eLevel			= API_HVC_HEVC_LEVEL_40;
     tApiHvcInitParam.eTier			= API_HVC_HEVC_MAIN_TIER;
-    tApiHvcInitParam.eResolution	= API_HVC_RESOLUTION_1920x1080;
+    tApiHvcInitParam.eResolution	= API_HVC_RESOLUTION_720x576;
 	tApiHvcInitParam.eChromaFmt     = API_HVC_CHROMA_FORMAT_420;
 	tApiHvcInitParam.eBitDepth      = API_HVC_BIT_DEPTH_8;
 	tApiHvcInitParam.eGopType       = API_HVC_GOP_IB;
 	tApiHvcInitParam.eGopSize       = API_HVC_GOP_SIZE_64;
-	tApiHvcInitParam.eBFrameNum     = API_HVC_B_FRAME_ONE;
+	tApiHvcInitParam.eBFrameNum     = API_HVC_B_FRAME_MAX;
 	tApiHvcInitParam.eTargetFrameRate = API_HVC_FPS_24;
 	tApiHvcInitParam.u32Bitrate     = 8000;
 	tApiHvcInitParam.eDbgLevel      = API_HVC_DBG_LEVEL_3;
@@ -241,21 +251,19 @@ int main(int argc, char** argv)
     }
 
 	pthread_t tid;
-	int ret;
 
-	ret = 0;
 	tVrawFileParam.eBoard 	= eBoard;
 	tVrawFileParam.eCh		= eCh;
 	tVrawFileParam.fd_vraw_file = fd;
-	tVrawFileParam.frame_sz = HARD_CODE_FRAME_SIZE;
+	tVrawFileParam.frame_sz = wxh;
 
-	ret = pthread_create
-		(
-			&tid,
-			NULL,
-			vraw_file_read,
-			&tVrawFileParam
-		);
+	pthread_create
+	(
+		&tid,
+		NULL,
+		vraw_file_read,
+		&tVrawFileParam
+	);
 
     // Start the streaming:
     *env << "Beginning streaming...\n";

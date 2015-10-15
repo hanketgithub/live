@@ -141,6 +141,42 @@ void ByteStreamFileSource::fileReadableHandler(ByteStreamFileSource* source, int
     source->doReadFromFile();
 }
 
+char *str_frame_type(API_HVC_FRAME_TYPE_E eType)
+{
+    char *ret;
+    
+    switch (eType)
+    {
+        case API_HVC_FRAME_TYPE_I:
+        {
+            ret = "I";
+            
+            break;
+        }
+        case API_HVC_FRAME_TYPE_P:
+        {
+            ret = "P";
+            
+            break;
+        }
+        case API_HVC_FRAME_TYPE_B:
+        {
+            ret = "B";
+
+            break;
+        }
+        default:
+        {
+            ret = "?";
+
+            break;
+        }
+    }
+
+    return ret;
+}
+
+
 void ByteStreamFileSource::doReadFromFile()
 {
     // Try to read as many bytes as will fit in the buffer provided (or "fPreferredFrameSize" if less)
@@ -153,46 +189,49 @@ void ByteStreamFileSource::doReadFromFile()
     {
         fMaxSize = fPreferredFrameSize;
     }
+
 #ifdef READ_FROM_FILES_SYNCHRONOUSLY
     fFrameSize = fread(fTo, 1, fMaxSize, fFid);
 #else
+    
+    fprintf(stderr, "fMaxSize=%d\n", fMaxSize);
+
     if (fFidIsSeekable)
     {
-    	// Hank: HVC Pop here!
         //fFrameSize = fread(fTo, 1, fMaxSize, fFid);
         while (1)
         {
-	        API_HVC_RET ret;
-	        API_HVC_HEVC_CODED_PICT_T pic;
-	        
-	        ret = API_HVC_RET_SUCCESS;
-	        memset(&pic, 0, sizeof(pic));
-	        
-	        ret = HVC_ENC_PopES(API_HVC_BOARD_1, API_HVC_CHN_1, &pic);
-	        if (ret == API_HVC_RET_EMPTY)
-	        {
-	            fputc('.', stderr);
-	        }
-	        else
-	        {
-	            uint32_t j;
-				uint8_t *p;
+            API_HVC_RET ret;
+            API_HVC_HEVC_CODED_PICT_T pic;
+            
+            ret = API_HVC_RET_SUCCESS;
+            memset(&pic, 0, sizeof(pic));
+            
+            ret = HVC_ENC_PopES(API_HVC_BOARD_1, API_HVC_CHN_1, &pic);
+            if (ret == API_HVC_RET_EMPTY)
+            {
+                fputc('.', stderr);
+            }
+            else
+            {
+                uint32_t j;
+                uint8_t *p;
 
-				p = fTo;
-				
-	            fprintf(stderr, "\nPop %d frame, last=%d pts=%d ", pic.eFrameType, pic.bLastES, pic.u32pts);
-	            
-	            for (j = 0; j < pic.u32NalNum; j++)
-	            {
-					memcpy(p, pic.tNalInfo[j].pu8Addr, pic.tNalInfo[j].u32Length);
-					p += pic.tNalInfo[j].u32Length;
-					
-	                fprintf(stderr, "NalType=%d ", pic.tNalInfo[j].eNalType);
-	            }
-				fFrameSize = p - fTo;
-	            fprintf(stderr, "\n");
-				break;
-	        }
+                p = fTo;
+                
+                fprintf(stderr, "\nPop %s frame, last=%d pts=%d ", str_frame_type(pic.eFrameType), pic.bLastES, pic.u32pts);
+                
+                for (j = 0; j < pic.u32NalNum; j++)
+                {
+                    memcpy(p, pic.tNalInfo[j].pu8Addr, pic.tNalInfo[j].u32Length);
+                    p += pic.tNalInfo[j].u32Length;
+                    
+                    fprintf(stderr, "NalType=%d ", pic.tNalInfo[j].eNalType);
+                }
+                fFrameSize = p - fTo;
+                fprintf(stderr, "frame length=%d\n", fFrameSize);
+                break;
+            }
         }
     }
     else
@@ -219,7 +258,7 @@ void ByteStreamFileSource::doReadFromFile()
         else
         {
             // Increment by the play time of the previous data:
-            unsigned uSeconds	= fPresentationTime.tv_usec + fLastPlayTime;
+            unsigned uSeconds   = fPresentationTime.tv_usec + fLastPlayTime;
             fPresentationTime.tv_sec += uSeconds/1000000;
             fPresentationTime.tv_usec = uSeconds%1000000;
         }
