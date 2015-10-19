@@ -231,7 +231,7 @@ void H264or5Fragmenter::doGetNextFrame()
             if (fNumValidDataBytes - 1 <= fMaxSize)
             {   
             	// case 1
-				printf("H264or5Fragmenter::%s case1\n", __FUNCTION__);
+				//printf("H264or5Fragmenter::%s case1\n", __FUNCTION__);
 				
                 memmove(fTo, &fInputBuffer[1], fNumValidDataBytes - 1);
                 fFrameSize = fNumValidDataBytes - 1;
@@ -244,7 +244,7 @@ void H264or5Fragmenter::doGetNextFrame()
                 // packet now.  Note that we add "NAL header" and "FU header" bytes to the front
                 // of the packet (overwriting the existing "NAL header").
 
-				printf("H264or5Fragmenter::%s case2\n", __FUNCTION__);
+				//printf("H264or5Fragmenter::%s case2\n", __FUNCTION__);
 
                 if (fHNumber == 264)
                 {
@@ -274,7 +274,7 @@ void H264or5Fragmenter::doGetNextFrame()
             // bit if this is the last fragment.)
             unsigned numExtraHeaderBytes;
 
-			printf("H264or5Fragmenter::%s case3\n", __FUNCTION__);
+			//printf("H264or5Fragmenter::%s case3\n", __FUNCTION__);
 
 			if (fHNumber == 264)
             {

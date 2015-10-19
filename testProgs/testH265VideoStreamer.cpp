@@ -25,6 +25,11 @@
 // Note also that - unlike some other "*Streamer" demo applications - the resulting stream can be
 // received only using a RTSP client (such as "openRTSP")
 
+#include <stdint.h>
+
+#include "m31_hvc_api/HVC_types.h"
+#include "m31_hvc_api/HVC_encoder.h"
+
 #include <liveMedia.hh>
 #include <BasicUsageEnvironment.hh>
 #include <GroupsockHelper.hh>
@@ -32,9 +37,6 @@
 #include <sys/stat.h>
 #include <fcntl.h>
 #include <pthread.h>
-
-#include "m31_hvc_api/HVC_types.h"
-#include "m31_hvc_api/HVC_encoder.h"
 
 
 typedef struct
@@ -208,7 +210,7 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    int wxh;
+    int wxh = 0;
 
     wxh = atoi(argv[1]) * atoi(argv[2]) * 3 / 2;
 
@@ -224,9 +226,9 @@ int main(int argc, char *argv[])
 	tApiHvcInitParam.eGopType       = API_HVC_GOP_IB;
 	tApiHvcInitParam.eGopSize       = API_HVC_GOP_SIZE_64;
 	tApiHvcInitParam.eBFrameNum     = API_HVC_B_FRAME_MAX;
-	tApiHvcInitParam.eTargetFrameRate = API_HVC_FPS_24;
-	tApiHvcInitParam.u32Bitrate     = 8000;
-	tApiHvcInitParam.eDbgLevel      = API_HVC_DBG_LEVEL_3;
+	tApiHvcInitParam.eTargetFrameRate = API_HVC_FPS_29_97;
+	tApiHvcInitParam.u32Bitrate     = 1000;
+	tApiHvcInitParam.eDbgLevel      = API_HVC_DBG_LEVEL_1;
 
     if (HVC_ENC_Init(eBoard, eCh, &tApiHvcInitParam) == API_HVC_RET_FAIL)
     {

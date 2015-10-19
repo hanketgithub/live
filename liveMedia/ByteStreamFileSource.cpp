@@ -18,11 +18,50 @@
 // A file source that is a plain byte stream (rather than frames)
 // Implementation
 
+#include <stdint.h>
+
+#include "m31_hvc_api/HVC_types.h"
+#include "m31_hvc_api/HVC_encoder.h"
+
 #include "ByteStreamFileSource.hh"
 #include "InputFile.hh"
 #include "GroupsockHelper.hh"
-#include "m31_hvc_api/HVC_types.h"
-#include "m31_hvc_api/HVC_encoder.h"
+
+const char *ByteStreamFileSource::frameTypeToString(API_HVC_FRAME_TYPE_E eType)
+{
+    const char *ret;
+    
+    switch (eType)
+    {
+        case API_HVC_FRAME_TYPE_I:
+        {
+            ret = "I";
+            
+            break;
+        }
+        case API_HVC_FRAME_TYPE_P:
+        {
+            ret = "P";
+            
+            break;
+        }
+        case API_HVC_FRAME_TYPE_B:
+        {
+            ret = "B";
+
+            break;
+        }
+        default:
+        {
+            ret = "?";
+
+            break;
+        }
+    }
+
+    return ret;
+}
+
 
 ////////// ByteStreamFileSource //////////
 
@@ -141,41 +180,6 @@ void ByteStreamFileSource::fileReadableHandler(ByteStreamFileSource* source, int
     source->doReadFromFile();
 }
 
-char *str_frame_type(API_HVC_FRAME_TYPE_E eType)
-{
-    char *ret;
-    
-    switch (eType)
-    {
-        case API_HVC_FRAME_TYPE_I:
-        {
-            ret = "I";
-            
-            break;
-        }
-        case API_HVC_FRAME_TYPE_P:
-        {
-            ret = "P";
-            
-            break;
-        }
-        case API_HVC_FRAME_TYPE_B:
-        {
-            ret = "B";
-
-            break;
-        }
-        default:
-        {
-            ret = "?";
-
-            break;
-        }
-    }
-
-    return ret;
-}
-
 
 void ByteStreamFileSource::doReadFromFile()
 {
@@ -194,7 +198,7 @@ void ByteStreamFileSource::doReadFromFile()
     fFrameSize = fread(fTo, 1, fMaxSize, fFid);
 #else
     
-    fprintf(stderr, "fMaxSize=%d\n", fMaxSize);
+    fprintf(stderr, "\nfMaxSize=%d\n", fMaxSize);
 
     if (fFidIsSeekable)
     {
@@ -203,36 +207,72 @@ void ByteStreamFileSource::doReadFromFile()
         {
             API_HVC_RET ret;
             API_HVC_HEVC_CODED_PICT_T pic;
+            static uint8_t tmp[1000000];
+            static uint32_t leftBytes;
             
             ret = API_HVC_RET_SUCCESS;
             memset(&pic, 0, sizeof(pic));
-            
-            ret = HVC_ENC_PopES(API_HVC_BOARD_1, API_HVC_CHN_1, &pic);
-            if (ret == API_HVC_RET_EMPTY)
+
+            if (leftBytes != 0)
             {
-                fputc('.', stderr);
+                fprintf(stderr, "Flush %d bytes in tmp!\n", leftBytes);
+                memcpy(fTo, tmp, leftBytes);
+                fFrameSize = leftBytes;
+                leftBytes = 0;
+                break;
             }
             else
             {
-                uint32_t j;
-                uint8_t *p;
-
-                p = fTo;
-                
-                fprintf(stderr, "\nPop %s frame, last=%d pts=%d ", str_frame_type(pic.eFrameType), pic.bLastES, pic.u32pts);
-                
-                for (j = 0; j < pic.u32NalNum; j++)
+                ret = HVC_ENC_PopES(API_HVC_BOARD_1, API_HVC_CHN_1, &pic);
+                if (ret == API_HVC_RET_EMPTY)
                 {
-                    memcpy(p, pic.tNalInfo[j].pu8Addr, pic.tNalInfo[j].u32Length);
-                    p += pic.tNalInfo[j].u32Length;
-                    
-                    fprintf(stderr, "NalType=%d ", pic.tNalInfo[j].eNalType);
+                    fputc('.', stderr);
                 }
-                fFrameSize = p - fTo;
-                fprintf(stderr, "frame length=%d\n", fFrameSize);
-                break;
-            }
+                else
+                {
+                    uint32_t j;
+                    uint8_t *p;
+                    uint32_t u32EsSize;
+
+                    p           = tmp;
+                    u32EsSize   = 0;
+      
+                    fprintf(stderr, "Pop %s frame, last=%d pts=%d ", frameTypeToString(pic.eFrameType), pic.bLastES, pic.u32pts);
+                    
+                    for (j = 0; j < pic.u32NalNum; j++)
+                    {
+                        memcpy(p, pic.tNalInfo[j].pu8Addr, pic.tNalInfo[j].u32Length);
+                        p += pic.tNalInfo[j].u32Length;
+                        
+                        fprintf(stderr, "NalType=%d ", pic.tNalInfo[j].eNalType);
+                    }
+
+                    u32EsSize = p - tmp;
+
+                    fprintf(stderr, "\n EsSize=%d\n", u32EsSize);
+
+                    if (u32EsSize > fMaxSize)
+                    {
+                        // I. Copy fMaxSize to fTo
+                        memcpy(fTo, tmp, fMaxSize);
+
+                        // II. Copy left bytes to tmp
+                        leftBytes = u32EsSize - fMaxSize;
+                        memmove(tmp, &tmp[fMaxSize], leftBytes);
+                        fFrameSize = fMaxSize;
+                    }
+                    else
+                    {
+                        memcpy(fTo, tmp, u32EsSize);
+                        fFrameSize = u32EsSize;
+                    }
+                                        
+                    break;
+                }
+            }    
         }
+        
+        fprintf(stderr, "send length=%d\n", fFrameSize);
     }
     else
     {
