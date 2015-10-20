@@ -100,6 +100,9 @@ VP9VideoRTPSource.$(CPP):	include/VP9VideoRTPSource.hh
 include/VP9VideoRTPSource.hh:	include/MultiFramedRTPSource.hh
 ByteStreamFileSource.$(CPP):	include/ByteStreamFileSource.hh include/InputFile.hh
 include/ByteStreamFileSource.hh:	include/FramedFileSource.hh
+
+HvcEncoder.$(CPP):    
+
 ByteStreamMultiFileSource.$(CPP):	include/ByteStreamMultiFileSource.hh
 include/ByteStreamMultiFileSource.hh:	include/ByteStreamFileSource.hh
 ByteStreamMemoryBufferSource.$(CPP):	include/ByteStreamMemoryBufferSource.hh
