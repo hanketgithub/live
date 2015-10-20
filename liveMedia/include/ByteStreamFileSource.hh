@@ -60,7 +60,6 @@ protected:
 
   static void fileReadableHandler(ByteStreamFileSource* source, int mask);
   void doReadFromFile();
-  const char *frameTypeToString(API_HVC_FRAME_TYPE_E eType);
 
 private:
   // redefined virtual functions:

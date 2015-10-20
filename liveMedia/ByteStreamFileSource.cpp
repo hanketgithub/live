@@ -19,48 +19,18 @@
 // Implementation
 
 #include <stdint.h>
+#include <iostream>
+#include <string>
 
 #include "m31_hvc_api/HVC_types.h"
 #include "m31_hvc_api/HVC_encoder.h"
+#include "include/HvcEncoder.hh"
 
 #include "ByteStreamFileSource.hh"
 #include "InputFile.hh"
 #include "GroupsockHelper.hh"
 
-const char *ByteStreamFileSource::frameTypeToString(API_HVC_FRAME_TYPE_E eType)
-{
-    const char *ret;
-    
-    switch (eType)
-    {
-        case API_HVC_FRAME_TYPE_I:
-        {
-            ret = "I";
-            
-            break;
-        }
-        case API_HVC_FRAME_TYPE_P:
-        {
-            ret = "P";
-            
-            break;
-        }
-        case API_HVC_FRAME_TYPE_B:
-        {
-            ret = "B";
-
-            break;
-        }
-        default:
-        {
-            ret = "?";
-
-            break;
-        }
-    }
-
-    return ret;
-}
+HvcEncoder *pstEncoder;
 
 
 ////////// ByteStreamFileSource //////////
@@ -221,9 +191,22 @@ void ByteStreamFileSource::doReadFromFile()
                 leftBytes = 0;
                 break;
             }
+            else if (pstEncoder->hasLast())
+            {
+                fprintf(stderr, "Last ES already!\n");
+                fFrameSize = 0;
+
+                pstEncoder->stop();
+                pstEncoder->exit();
+
+                exit(0);
+                
+                break;
+            }
             else
             {
-                ret = HVC_ENC_PopES(API_HVC_BOARD_1, API_HVC_CHN_1, &pic);
+                ret = pstEncoder->pop(&pic);
+                
                 if (ret == API_HVC_RET_EMPTY)
                 {
                     fputc('.', stderr);
@@ -236,20 +219,18 @@ void ByteStreamFileSource::doReadFromFile()
 
                     p           = tmp;
                     u32EsSize   = 0;
-      
-                    fprintf(stderr, "Pop %s frame, last=%d pts=%d ", frameTypeToString(pic.eFrameType), pic.bLastES, pic.u32pts);
-                    
+                          
                     for (j = 0; j < pic.u32NalNum; j++)
                     {
                         memcpy(p, pic.tNalInfo[j].pu8Addr, pic.tNalInfo[j].u32Length);
-                        p += pic.tNalInfo[j].u32Length;
-                        
-                        fprintf(stderr, "NalType=%d ", pic.tNalInfo[j].eNalType);
+                        p += pic.tNalInfo[j].u32Length;                      
                     }
+
+                    std::cout << *pstEncoder->toString(&pic) << std::endl;
 
                     u32EsSize = p - tmp;
 
-                    fprintf(stderr, "\n EsSize=%d\n", u32EsSize);
+                    //fprintf(stderr, "\n EsSize=%d\n", u32EsSize);
 
                     if (u32EsSize > fMaxSize)
                     {
@@ -325,3 +306,4 @@ void ByteStreamFileSource::doReadFromFile()
     FramedSource::afterGetting(this);
 #endif
 }
+

@@ -26,9 +26,11 @@
 // received only using a RTSP client (such as "openRTSP")
 
 #include <stdint.h>
+#include <string>
 
 #include "m31_hvc_api/HVC_types.h"
 #include "m31_hvc_api/HVC_encoder.h"
+#include "../liveMedia/include/HvcEncoder.hh"
 
 #include <liveMedia.hh>
 #include <BasicUsageEnvironment.hh>
@@ -39,28 +41,15 @@
 #include <pthread.h>
 
 
-typedef struct
-{
-    API_HVC_BOARD_E eBoard;
-    API_HVC_CHN_E   eCh;
-    int        		fd_vraw_file;
-    size_t    		frame_sz;
-} HVC_VRAW_FILE_PARAM_T;
-
-
 UsageEnvironment* env;
 char const* inputFileName = "test.yuv";
 H265VideoStreamFramer* videoSource;
 RTPSink* videoSink;
 
-API_HVC_BOARD_E eBoard = API_HVC_BOARD_1;
-API_HVC_CHN_E eCh = API_HVC_CHN_1;
+int fd;
+uint32_t img_size;
+extern HvcEncoder *pstEncoder;
 
-API_HVC_INIT_PARAM_T tApiHvcInitParam;
-HVC_VRAW_FILE_PARAM_T tVrawFileParam;
-
-
-void *vraw_file_read(void *thread_param_p);
 void play(); // forward
 
 void *vraw_file_read(void *thread_param_p)
@@ -72,7 +61,7 @@ void *vraw_file_read(void *thread_param_p)
     uint64_t total_read_frame;
     uint32_t raw_frame_cnt;
     uint32_t frame_interval;
-    HVC_VRAW_FILE_PARAM_T *vraw_param_p;
+    HvcEncoder *p_enc;
     uint64_t remain_frame;
     struct stat file_stat;
 
@@ -83,13 +72,13 @@ void *vraw_file_read(void *thread_param_p)
     r_size                  = 0;
     total_read_frame        = 0;
     raw_frame_cnt           = 0;
-    vraw_param_p            = (HVC_VRAW_FILE_PARAM_T *) thread_param_p;
+    p_enc                   = (HvcEncoder *) thread_param_p;
     remain_frame            = 0;
 
 
-    fstat(vraw_param_p->fd_vraw_file, &file_stat);
+    fstat(fd, &file_stat);
 
-    frame_sz = vraw_param_p->frame_sz;
+    frame_sz = img_size;
 
     vraw_data_buf_p = (uint8_t *) malloc(frame_sz);
     
@@ -109,7 +98,7 @@ void *vraw_file_read(void *thread_param_p)
 
         memset(&img, 0 , sizeof(img));
 
-        r_size = read(vraw_param_p->fd_vraw_file, vraw_data_buf_p, frame_sz);
+        r_size = read(fd, vraw_data_buf_p, frame_sz);
 
         if (r_size == 0)
         {
@@ -126,9 +115,10 @@ void *vraw_file_read(void *thread_param_p)
         img.bLastFrame  = (remain_frame == 0) ? true : false;
         img.eFormat     = API_HVC_IMAGE_FORMAT_NV12;
 
-        if (HVC_ENC_PushImage(vraw_param_p->eBoard, vraw_param_p->eCh, &img))
+        if (!p_enc->push(&img))
         {
             fprintf(stderr, "Error: %s PushImage failed!\n", __FILE__);
+
             return NULL;
         }
         
@@ -212,38 +202,38 @@ int main(int argc, char *argv[])
 
     int wxh = 0;
 
-    wxh = atoi(argv[1]) * atoi(argv[2]) * 3 / 2;
+    wxh = atoi(argv[1]) * atoi(argv[2]);
 
-    HVC_ENC_PrintVersion(eBoard);
+    API_HVC_BOARD_E eBoard = API_HVC_BOARD_1;
+    API_HVC_CHN_E eCh = API_HVC_CHN_1;
 
-    tApiHvcInitParam.eInputMode 	= API_HVC_INPUT_MODE_DATA;
-    tApiHvcInitParam.eProfile   	= API_HVC_HEVC_MAIN_PROFILE;
-    tApiHvcInitParam.eLevel			= API_HVC_HEVC_LEVEL_40;
-    tApiHvcInitParam.eTier			= API_HVC_HEVC_MAIN_TIER;
-    tApiHvcInitParam.eResolution	= API_HVC_RESOLUTION_720x576;
-	tApiHvcInitParam.eChromaFmt     = API_HVC_CHROMA_FORMAT_420;
-	tApiHvcInitParam.eBitDepth      = API_HVC_BIT_DEPTH_8;
-	tApiHvcInitParam.eGopType       = API_HVC_GOP_IB;
-	tApiHvcInitParam.eGopSize       = API_HVC_GOP_SIZE_64;
-	tApiHvcInitParam.eBFrameNum     = API_HVC_B_FRAME_MAX;
-	tApiHvcInitParam.eTargetFrameRate = API_HVC_FPS_29_97;
-	tApiHvcInitParam.u32Bitrate     = 1000;
-	tApiHvcInitParam.eDbgLevel      = API_HVC_DBG_LEVEL_1;
+    pstEncoder = new HvcEncoder(eBoard, eCh);
 
-    if (HVC_ENC_Init(eBoard, eCh, &tApiHvcInitParam) == API_HVC_RET_FAIL)
+    pstEncoder->setInputMode(API_HVC_INPUT_MODE_DATA);
+    pstEncoder->setProfile(API_HVC_HEVC_MAIN_PROFILE);
+    pstEncoder->setLevel(API_HVC_HEVC_LEVEL_40);
+    pstEncoder->setTier(API_HVC_HEVC_MAIN_TIER);
+    pstEncoder->setResolution(API_HVC_RESOLUTION_720x576);
+    pstEncoder->setChromaFormat(API_HVC_CHROMA_FORMAT_420);
+    pstEncoder->setBitDepth(API_HVC_BIT_DEPTH_8);
+    pstEncoder->setGopType(API_HVC_GOP_IB);
+    pstEncoder->setGopSize(API_HVC_GOP_SIZE_64);
+    pstEncoder->setBnum(API_HVC_B_FRAME_MAX);
+    pstEncoder->setFps(API_HVC_FPS_29_97);
+    pstEncoder->setBitrate(1000);
+    
+
+    if (!pstEncoder->init())
     {
-        fprintf(stderr, "%s line %d failed!\n", __FILE__, __LINE__);
         goto main_ret;
     }
 
-	if (HVC_ENC_Start(eBoard, eCh))
-	{
-		fprintf(stderr, "%s line %d failed!\n", __FILE__, __LINE__);
-		goto main_ret;
-	}
+    if (!pstEncoder->start())
+    {
+        goto main_ret;
+    }
 
 	// Open image file for pushing.
-    int fd;
     fd = open(inputFileName, O_RDONLY);
     if (fd < 0)
     {
@@ -254,17 +244,14 @@ int main(int argc, char *argv[])
 
 	pthread_t tid;
 
-	tVrawFileParam.eBoard 	= eBoard;
-	tVrawFileParam.eCh		= eCh;
-	tVrawFileParam.fd_vraw_file = fd;
-	tVrawFileParam.frame_sz = wxh;
+    img_size = wxh * 3 / 2;
 
 	pthread_create
 	(
 		&tid,
 		NULL,
 		vraw_file_read,
-		&tVrawFileParam
+		pstEncoder
 	);
 
     // Start the streaming:
