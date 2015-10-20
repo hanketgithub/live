@@ -1,6 +1,8 @@
 #include <stdint.h>
 #include <stdio.h>
 #include <string>
+#include <string.h>
+#include <iostream>
 
 #include "m31_hvc_api/HVC_types.h"
 #include "m31_hvc_api/HVC_encoder.h"
@@ -62,6 +64,82 @@ API_HVC_RET HvcEncoder::pop(API_HVC_HEVC_CODED_PICT_T *pPic)
     }
 
     return eRet;    
+}
+
+
+uint32_t HvcEncoder::read(uint8_t *dst, uint32_t maxSize)
+{
+    static uint8_t tmp[1000000];
+    static uint32_t leftBytes;
+    uint32_t u32FrameSize = 0;
+
+    while (1)
+    {
+        API_HVC_RET ret;
+        API_HVC_HEVC_CODED_PICT_T pic;
+        
+        ret = API_HVC_RET_SUCCESS;
+        memset(&pic, 0, sizeof(pic));
+    
+        if (leftBytes != 0)
+        {
+            fprintf(stderr, "Flush %d bytes in tmp!\n", leftBytes);
+            memcpy(dst, tmp, leftBytes);
+            u32FrameSize = leftBytes;
+            leftBytes = 0;
+            break;
+        }
+        else
+        {
+            ret = this->pop(&pic);
+            
+            if (ret == API_HVC_RET_EMPTY)
+            {
+                fputc('.', stderr);
+            }
+            else
+            {
+                uint32_t j;
+                uint8_t *p;
+                uint32_t u32EsSize;
+    
+                p           = tmp;
+                u32EsSize   = 0;
+                      
+                for (j = 0; j < pic.u32NalNum; j++)
+                {
+                    memcpy(p, pic.tNalInfo[j].pu8Addr, pic.tNalInfo[j].u32Length);
+                    p += pic.tNalInfo[j].u32Length;                      
+                }
+    
+                std::cout << *this->toString(&pic) << std::endl;
+    
+                u32EsSize = p - tmp;
+    
+                //fprintf(stderr, "\n EsSize=%d\n", u32EsSize);
+    
+                if (u32EsSize > maxSize)
+                {
+                    // I. Copy fMaxSize to fTo
+                    memcpy(dst, tmp, maxSize);
+    
+                    // II. Copy left bytes to tmp
+                    leftBytes = u32EsSize - maxSize;
+                    memmove(tmp, &tmp[maxSize], leftBytes);
+                    u32FrameSize = maxSize;
+                }
+                else
+                {
+                    memcpy(dst, tmp, u32EsSize);
+                    u32FrameSize = u32EsSize;
+                }
+                                    
+                break;
+            }
+        }    
+    }
+    
+    return u32FrameSize;
 }
 
 

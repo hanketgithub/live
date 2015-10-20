@@ -10,6 +10,7 @@ public:
     bool start();
     bool push(API_HVC_IMG_T *pImg);
     API_HVC_RET pop(API_HVC_HEVC_CODED_PICT_T *pPic);
+    uint32_t read(uint8_t *dst, uint32_t maxSize);
     bool stop();
     bool exit();
 

@@ -173,87 +173,20 @@ void ByteStreamFileSource::doReadFromFile()
     if (fFidIsSeekable)
     {
         //fFrameSize = fread(fTo, 1, fMaxSize, fFid);
-        while (1)
+        if (pstEncoder->hasLast())
         {
-            API_HVC_RET ret;
-            API_HVC_HEVC_CODED_PICT_T pic;
-            static uint8_t tmp[1000000];
-            static uint32_t leftBytes;
-            
-            ret = API_HVC_RET_SUCCESS;
-            memset(&pic, 0, sizeof(pic));
+            fprintf(stderr, "Last ES already!\n");
+            fFrameSize = 0;
 
-            if (leftBytes != 0)
-            {
-                fprintf(stderr, "Flush %d bytes in tmp!\n", leftBytes);
-                memcpy(fTo, tmp, leftBytes);
-                fFrameSize = leftBytes;
-                leftBytes = 0;
-                break;
-            }
-            else if (pstEncoder->hasLast())
-            {
-                fprintf(stderr, "Last ES already!\n");
-                fFrameSize = 0;
+            pstEncoder->stop();
+            pstEncoder->exit();
 
-                pstEncoder->stop();
-                pstEncoder->exit();
-
-                exit(0);
-                
-                break;
-            }
-            else
-            {
-                ret = pstEncoder->pop(&pic);
-                
-                if (ret == API_HVC_RET_EMPTY)
-                {
-                    fputc('.', stderr);
-                }
-                else
-                {
-                    uint32_t j;
-                    uint8_t *p;
-                    uint32_t u32EsSize;
-
-                    p           = tmp;
-                    u32EsSize   = 0;
-                          
-                    for (j = 0; j < pic.u32NalNum; j++)
-                    {
-                        memcpy(p, pic.tNalInfo[j].pu8Addr, pic.tNalInfo[j].u32Length);
-                        p += pic.tNalInfo[j].u32Length;                      
-                    }
-
-                    std::cout << *pstEncoder->toString(&pic) << std::endl;
-
-                    u32EsSize = p - tmp;
-
-                    //fprintf(stderr, "\n EsSize=%d\n", u32EsSize);
-
-                    if (u32EsSize > fMaxSize)
-                    {
-                        // I. Copy fMaxSize to fTo
-                        memcpy(fTo, tmp, fMaxSize);
-
-                        // II. Copy left bytes to tmp
-                        leftBytes = u32EsSize - fMaxSize;
-                        memmove(tmp, &tmp[fMaxSize], leftBytes);
-                        fFrameSize = fMaxSize;
-                    }
-                    else
-                    {
-                        memcpy(fTo, tmp, u32EsSize);
-                        fFrameSize = u32EsSize;
-                    }
-                                        
-                    break;
-                }
-            }    
-        }
+            exit(0);            
+        }        
         
-        fprintf(stderr, "send length=%d\n", fFrameSize);
+        fFrameSize = pstEncoder->read(fTo, fMaxSize);
+        
+        fprintf(stderr, "send length=%d\n", fFrameSize);        
     }
     else
     {
