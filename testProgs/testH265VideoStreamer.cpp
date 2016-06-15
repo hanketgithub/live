@@ -28,8 +28,8 @@
 #include <stdint.h>
 #include <string>
 
-#include "m31_hvc_api/HVC_types.h"
-#include "m31_hvc_api/HVC_encoder.h"
+#include <libvega_encoder_api/VEGA330X_types.h>
+#include <libvega_encoder_api/VEGA330X_encoder.h>
 #include "../liveMedia/include/HvcEncoder.hh"
 
 #include <liveMedia.hh>
@@ -38,7 +38,6 @@
 #include <sys/types.h>
 #include <sys/stat.h>
 #include <fcntl.h>
-#include <pthread.h>
 
 
 UsageEnvironment* env;
@@ -46,94 +45,9 @@ char const* inputFileName = "test.yuv";
 H265VideoStreamFramer* videoSource;
 RTPSink* videoSink;
 
-int fd;
-uint32_t img_size;
-extern HvcEncoder *pstEncoder;
+extern Encoder *pstEncoder;
 
 void play(); // forward
-
-void *vraw_file_read(void *thread_param_p)
-{
-    size_t frame_sz;
-    uint8_t *vraw_data_buf_p;
-    ssize_t r_size;
-
-    uint64_t total_read_frame;
-    uint32_t raw_frame_cnt;
-    uint32_t frame_interval;
-    HvcEncoder *p_enc;
-    uint64_t remain_frame;
-    struct stat file_stat;
-
-
-    frame_sz                = 0;
-    vraw_data_buf_p         = NULL;
-    total_read_frame        = 0;
-    r_size                  = 0;
-    total_read_frame        = 0;
-    raw_frame_cnt           = 0;
-    p_enc                   = (HvcEncoder *) thread_param_p;
-    remain_frame            = 0;
-
-
-    fstat(fd, &file_stat);
-
-    frame_sz = img_size;
-
-    vraw_data_buf_p = (uint8_t *) malloc(frame_sz);
-    
-    if (!vraw_data_buf_p)
-    {
-        fprintf(stderr, "Error: %s malloc failed!\n", __FILE__);
-        return NULL;
-    }
-
-    remain_frame = ((uint64_t) file_stat.st_size / frame_sz);
-
-    frame_interval = 1;
-
-    while (remain_frame > 0)
-    {
-        API_HVC_IMG_T img;
-
-        memset(&img, 0 , sizeof(img));
-
-        r_size = read(fd, vraw_data_buf_p, frame_sz);
-
-        if (r_size == 0)
-        {
-            fprintf(stderr, "Error: read (V-RAW)\n");
-            return NULL;
-        }
-        
-        remain_frame--;
-        total_read_frame++;
-        
-        img.pu8Addr     = vraw_data_buf_p;
-        img.u32Size     = (uint32_t) frame_sz;
-        img.u32Pts      = raw_frame_cnt * frame_interval;
-        img.bLastFrame  = (remain_frame == 0) ? true : false;
-        img.eFormat     = API_HVC_IMAGE_FORMAT_NV12;
-
-        if (!p_enc->push(&img))
-        {
-            fprintf(stderr, "Error: %s PushImage failed!\n", __FILE__);
-
-            return NULL;
-        }
-        
-        raw_frame_cnt++;
-    }
-
-    if (vraw_data_buf_p != NULL)
-    {
-        free(vraw_data_buf_p);
-    }
-
-    fprintf(stderr, "%s finished!\n", __FUNCTION__);
-
-    return NULL;
-}
 
 int main(int argc, char *argv[])
 {
@@ -207,7 +121,7 @@ int main(int argc, char *argv[])
     API_HVC_BOARD_E eBoard = API_HVC_BOARD_1;
     API_HVC_CHN_E eCh = API_HVC_CHN_1;
 
-    pstEncoder = new HvcEncoder(eBoard, eCh);
+    pstEncoder = new Encoder(eBoard, eCh);
 
     pstEncoder->setInputMode(API_HVC_INPUT_MODE_DATA);
     pstEncoder->setProfile(API_HVC_HEVC_MAIN_PROFILE);
@@ -234,6 +148,7 @@ int main(int argc, char *argv[])
     }
 
 	// Open image file for pushing.
+    int fd;
     fd = open(inputFileName, O_RDONLY);
     if (fd < 0)
     {
@@ -241,18 +156,24 @@ int main(int argc, char *argv[])
 
         goto main_ret;
     }
+    pstEncoder->setInputFd(fd);
+    pstEncoder->setImgSize(wxh * 3 / 2);
 
-	pthread_t tid;
+    /* Push 9 images */
+    for (int i = 0; i < 9; i++)
+    {
+        API_VEGA330X_IMG_T img;
+        uint8_t *blank;
 
-    img_size = wxh * 3 / 2;
+        memset(&img, 0, sizeof(img));
+        blank = (uint8_t *) calloc(wxh * 3 / 2, sizeof(uint8_t));
 
-	pthread_create
-	(
-		&tid,
-		NULL,
-		vraw_file_read,
-		pstEncoder
-	);
+        img.pu8Addr = blank;
+        img.u32Size = wxh * 3 / 2;
+        img.bLastFrame = false;
+        HVC_ENC_PushImage(eBoard, eCh, &img);
+        free(blank);
+    }
 
     // Start the streaming:
     *env << "Beginning streaming...\n";
@@ -296,3 +217,4 @@ void play()
     *env << "Beginning to read from file...\n";
     videoSink->startPlaying(*videoSource, afterPlaying, videoSink);
 }
+
