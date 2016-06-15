@@ -2,24 +2,33 @@
 #include <stdio.h>
 #include <string>
 #include <string.h>
+#include <stdlib.h>
+#include <unistd.h>
+#include <sys/types.h>
+#include <sys/stat.h>
+#include <fcntl.h>
+
 #include <iostream>
 
-#include "m31_hvc_api/HVC_types.h"
-#include "m31_hvc_api/HVC_encoder.h"
+#include <libvega_encoder_api/VEGA330X_types.h>
+#include <libvega_encoder_api/VEGA330X_encoder.h>
 #include "include/HvcEncoder.hh"
 
 
-HvcEncoder::HvcEncoder(API_HVC_BOARD_E eBoard, API_HVC_CHN_E eCh)
+Encoder::Encoder(API_HVC_BOARD_E eBoard, API_HVC_CHN_E eCh)
 {
     this->eBoard = eBoard;
     this->eCh = eCh;
     
-    HVC_ENC_PrintVersion(eBoard);
+    VEGA330X_ENC_PrintVersion(eBoard);
 }
 
-bool HvcEncoder::init()
+bool Encoder::init()
 {
-    if (HVC_ENC_Init(eBoard, eCh, &tApiHvcInitParam) == API_HVC_RET_FAIL)
+    tApiInitParam.eDbgLevel = API_VEGA330X_DBG_LEVEL_3;
+    tApiInitParam.bDisableMonitor = true;
+
+    if (VEGA330X_ENC_Init(eBoard, eCh, &tApiInitParam) == API_HVC_RET_FAIL)
     {
         fprintf(stderr, "%s line %d failed!\n", __FILE__, __LINE__);
         return false;
@@ -29,9 +38,9 @@ bool HvcEncoder::init()
 }
 
 
-bool HvcEncoder::start()
+bool Encoder::start()
 {
-	if (HVC_ENC_Start(eBoard, eCh))
+	if (VEGA330X_ENC_Start(eBoard, eCh))
 	{
 		fprintf(stderr, "%s line %d failed!\n", __FILE__, __LINE__);
         return false;
@@ -41,109 +50,119 @@ bool HvcEncoder::start()
 }
 
 
-bool HvcEncoder::push(API_HVC_IMG_T *pImg)
+API_HVC_RET Encoder::push(API_VEGA330X_IMG_T *pImg)
 {
-    if (HVC_ENC_PushImage(eBoard, eCh, pImg))
-	{
-        return false;
-	}
-
-    return true;
+    return VEGA330X_ENC_PushImage(eBoard, eCh, pImg);
 }
 
 
-API_HVC_RET HvcEncoder::pop(API_HVC_HEVC_CODED_PICT_T *pPic)
+API_HVC_RET Encoder::pop(API_VEGA330X_HEVC_CODED_PICT_T *pPic)
 {
     API_HVC_RET eRet = API_HVC_RET_SUCCESS;
     
-    eRet = HVC_ENC_PopES(eBoard, eCh, pPic);
+    eRet = VEGA330X_ENC_PopES(eBoard, eCh, pPic);
 
     if (pPic->bLastES)
     {
-        bLast = true;
+        this->bLastES = true;
     }
 
     return eRet;    
 }
 
-
-uint32_t HvcEncoder::read(uint8_t *dst, uint32_t maxSize)
+/** Major Encoder input/output function         */
+/** Do push-pop pair to generate ES             */
+/** Must have pushed 9 raw frame before head    */
+uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
 {
-    static uint8_t tmp[1000000];
+    static uint8_t read_buf[1000000];
     static uint32_t leftBytes;
+    static int frameCnt = 0;
     uint32_t u32FrameSize = 0;
 
-    while (1)
+
+    if (leftBytes != 0)
     {
-        API_HVC_RET ret;
-        API_HVC_HEVC_CODED_PICT_T pic;
-        
-        ret = API_HVC_RET_SUCCESS;
-        memset(&pic, 0, sizeof(pic));
-    
-        if (leftBytes != 0)
+        fprintf(stderr, "Flush %d bytes in buffer!\n", leftBytes);
+        memcpy(dst, read_buf, leftBytes);
+        u32FrameSize = leftBytes;
+        leftBytes = 0;
+    }
+    else
+    {
+        /* Do push image */
+        uint8_t *vraw_data_buf_p; 
+        API_HVC_IMG_T img;
+
+        memset(&img, 0, sizeof(img));
+        vraw_data_buf_p = (uint8_t *) calloc(this->img_size, sizeof(uint8_t));
+
+        read(this->input_fd, vraw_data_buf_p, this->img_size);
+        frameCnt++;
+        if (!this->bLastFramePushed)
         {
-            fprintf(stderr, "Flush %d bytes in tmp!\n", leftBytes);
-            memcpy(dst, tmp, leftBytes);
-            u32FrameSize = leftBytes;
-            leftBytes = 0;
-            break;
+            img.pu8Addr     = vraw_data_buf_p;
+            img.u32Size     = (uint32_t) this->img_size;
+            img.bLastFrame  = (frameCnt == 200);
+            img.eFormat     = API_HVC_IMAGE_FORMAT_NV12;
+
+            this->push(&img);
+        }
+        if (img.bLastFrame)
+        {
+            this->bLastFramePushed = true;
+        }
+
+        free(vraw_data_buf_p);
+        
+        /* Do pop ES */
+        API_VEGA330X_HEVC_CODED_PICT_T coded_pict;
+        
+        memset(&coded_pict, 0, sizeof(coded_pict));
+        
+        this->pop(&coded_pict);
+
+        uint32_t j;
+        uint8_t *p;
+        uint32_t u32EsSize;
+
+        p           = read_buf;
+        u32EsSize   = 0;
+              
+        for (j = 0; j < coded_pict.u32NalNum; j++)
+        {
+            memcpy(p, coded_pict.tNalInfo[j].pu8Addr, coded_pict.tNalInfo[j].u32Length);
+            p += coded_pict.tNalInfo[j].u32Length;                      
+        }
+
+        std::cout << *this->toString(&coded_pict) << std::endl;
+
+        u32EsSize = p - read_buf;
+
+        //fprintf(stderr, "\n EsSize=%d\n", u32EsSize);
+
+        if (u32EsSize > maxSize)
+        {
+            // I. Copy fMaxSize to fTo
+            memcpy(dst, read_buf, maxSize);
+
+            // II. Copy left bytes to read_buf
+            leftBytes = u32EsSize - maxSize;
+            memmove(read_buf, &read_buf[maxSize], leftBytes);
+            u32FrameSize = maxSize;
         }
         else
         {
-            ret = this->pop(&pic);
-            
-            if (ret == API_HVC_RET_EMPTY)
-            {
-                fputc('.', stderr);
-            }
-            else
-            {
-                uint32_t j;
-                uint8_t *p;
-                uint32_t u32EsSize;
-    
-                p           = tmp;
-                u32EsSize   = 0;
-                      
-                for (j = 0; j < pic.u32NalNum; j++)
-                {
-                    memcpy(p, pic.tNalInfo[j].pu8Addr, pic.tNalInfo[j].u32Length);
-                    p += pic.tNalInfo[j].u32Length;                      
-                }
-    
-                std::cout << *this->toString(&pic) << std::endl;
-    
-                u32EsSize = p - tmp;
-    
-                //fprintf(stderr, "\n EsSize=%d\n", u32EsSize);
-    
-                if (u32EsSize > maxSize)
-                {
-                    // I. Copy fMaxSize to fTo
-                    memcpy(dst, tmp, maxSize);
-    
-                    // II. Copy left bytes to tmp
-                    leftBytes = u32EsSize - maxSize;
-                    memmove(tmp, &tmp[maxSize], leftBytes);
-                    u32FrameSize = maxSize;
-                }
-                else
-                {
-                    memcpy(dst, tmp, u32EsSize);
-                    u32FrameSize = u32EsSize;
-                }
-                                    
-                break;
-            }
-        }    
-    }
+            memcpy(dst, read_buf, u32EsSize);
+            u32FrameSize = u32EsSize;
+        }
+    }    
     
     return u32FrameSize;
 }
 
 
-bool HvcEncoder::stop()
+bool Encoder::stop()
 {
     if (HVC_ENC_Stop(eBoard, eCh))
 	{
@@ -154,7 +173,7 @@ bool HvcEncoder::stop()
 }
 
 
-bool HvcEncoder::exit()
+bool Encoder::exit()
 {
     if (HVC_ENC_Exit(eBoard, eCh))
 	{
@@ -165,7 +184,7 @@ bool HvcEncoder::exit()
 }
 
 
-std::string *HvcEncoder::toString(API_HVC_HEVC_CODED_PICT_T *pPic)
+std::string *Encoder::toString(API_HVC_HEVC_CODED_PICT_T *pPic)
 {
     char msg[128];
     char *cp = msg;
@@ -198,10 +217,10 @@ std::string *HvcEncoder::toString(API_HVC_HEVC_CODED_PICT_T *pPic)
         }
     }
     
-    cp += sprintf(cp, " pts=%d", pPic->u32pts);
+    cp += sprintf(cp, " pts=%ld", pPic->pts);
     cp += sprintf(cp, " last=%d", pPic->bLastES);
 
-    for (int i = 0; i < pPic->u32NalNum; i++)
+    for (uint32_t i = 0; i < pPic->u32NalNum; i++)
     {
         cp += sprintf(cp, " NalType=%d", pPic->tNalInfo[i].eNalType);
     }
@@ -210,159 +229,169 @@ std::string *HvcEncoder::toString(API_HVC_HEVC_CODED_PICT_T *pPic)
 }
 
 
-void HvcEncoder::setInputMode(API_HVC_INPUT_MODE_E eInputMode)
+void Encoder::setInputMode(API_HVC_INPUT_MODE_E eInputMode)
 {
-    this->tApiHvcInitParam.eInputMode = eInputMode;
+    this->tApiInitParam.eInputMode = eInputMode;
 }
 
 
-API_HVC_INPUT_MODE_E HvcEncoder::getInputMode()
+API_HVC_INPUT_MODE_E Encoder::getInputMode()
 {
-    return this->tApiHvcInitParam.eInputMode;
+    return this->tApiInitParam.eInputMode;
 }
 
 
-void HvcEncoder::setProfile(API_HVC_HEVC_PROFILE_E eProfile)
+void Encoder::setProfile(API_HVC_HEVC_PROFILE_E eProfile)
 {
-    this->tApiHvcInitParam.eProfile = eProfile;
+    this->tApiInitParam.eProfile = eProfile;
 }
 
 
-API_HVC_HEVC_PROFILE_E HvcEncoder::getProfile()
+API_HVC_HEVC_PROFILE_E Encoder::getProfile()
 {
-    return this->tApiHvcInitParam.eProfile;
+    return this->tApiInitParam.eProfile;
 }
 
 
-void HvcEncoder::setLevel(API_HVC_HEVC_LEVEL_E eLevel)
+void Encoder::setLevel(API_HVC_HEVC_LEVEL_E eLevel)
 {
-    this->tApiHvcInitParam.eLevel = eLevel;
+    this->tApiInitParam.eLevel = eLevel;
 }
 
 
-API_HVC_HEVC_LEVEL_E HvcEncoder::getLevel()
+API_HVC_HEVC_LEVEL_E Encoder::getLevel()
 {
-    return this->tApiHvcInitParam.eLevel;
+    return this->tApiInitParam.eLevel;
 }
 
 
-void HvcEncoder::setTier(API_HVC_HEVC_TIER_E eTier)
+void Encoder::setTier(API_HVC_HEVC_TIER_E eTier)
 {
-    this->tApiHvcInitParam.eTier = eTier;
+    this->tApiInitParam.eTier = eTier;
 }
 
 
-API_HVC_HEVC_TIER_E HvcEncoder::getTier()
+API_HVC_HEVC_TIER_E Encoder::getTier()
 {
-    return this->tApiHvcInitParam.eTier;
+    return this->tApiInitParam.eTier;
 }
 
 
-void HvcEncoder::setResolution(API_HVC_RESOLUTION_E eRes)
+void Encoder::setResolution(API_HVC_RESOLUTION_E eRes)
 {
-    this->tApiHvcInitParam.eResolution = eRes;
+    this->tApiInitParam.eResolution = eRes;
 }
 
 
-API_HVC_RESOLUTION_E HvcEncoder::getResolution()
+API_HVC_RESOLUTION_E Encoder::getResolution()
 {
-    return this->tApiHvcInitParam.eResolution;
+    return this->tApiInitParam.eResolution;
 }
 
 
-void HvcEncoder::setChromaFormat(API_HVC_CHROMA_FORMAT_E eFmt)
+void Encoder::setChromaFormat(API_HVC_CHROMA_FORMAT_E eFmt)
 {
-    this->tApiHvcInitParam.eChromaFmt = eFmt;
+    this->tApiInitParam.eChromaFmt = eFmt;
 }
 
 
-API_HVC_CHROMA_FORMAT_E HvcEncoder::getChromaFormat()
+API_HVC_CHROMA_FORMAT_E Encoder::getChromaFormat()
 {
-    return this->tApiHvcInitParam.eChromaFmt;
+    return this->tApiInitParam.eChromaFmt;
 }
 
 
-void HvcEncoder::setBitDepth(API_HVC_BIT_DEPTH_E eBitDepth)
+void Encoder::setBitDepth(API_HVC_BIT_DEPTH_E eBitDepth)
 {
-    this->tApiHvcInitParam.eBitDepth = eBitDepth;
+    this->tApiInitParam.eBitDepth = eBitDepth;
 }
 
 
-API_HVC_BIT_DEPTH_E HvcEncoder::getBitDepth()
+API_HVC_BIT_DEPTH_E Encoder::getBitDepth()
 {
-    return this->tApiHvcInitParam.eBitDepth;
+    return this->tApiInitParam.eBitDepth;
 }
 
 
-void HvcEncoder::setGopType(API_HVC_GOP_TYPE_E eType)
+void Encoder::setGopType(API_HVC_GOP_TYPE_E eType)
 {
-    this->tApiHvcInitParam.eGopType = eType;
+    this->tApiInitParam.eGopType = eType;
 }
 
 
-API_HVC_GOP_TYPE_E HvcEncoder::getGopType()
+API_HVC_GOP_TYPE_E Encoder::getGopType()
 {
-    return this->tApiHvcInitParam.eGopType;
+    return this->tApiInitParam.eGopType;
 }
 
 
-void HvcEncoder::setGopSize(API_HVC_GOP_SIZE_E eSize)
+void Encoder::setGopSize(API_HVC_GOP_SIZE_E eSize)
 {
-    this->tApiHvcInitParam.eGopSize = eSize;
+    this->tApiInitParam.eGopSize = eSize;
 }
 
 
-API_HVC_GOP_SIZE_E HvcEncoder::getGopSize()
+API_HVC_GOP_SIZE_E Encoder::getGopSize()
 {
-    return this->tApiHvcInitParam.eGopSize;
+    return this->tApiInitParam.eGopSize;
 }
 
 
-void HvcEncoder::setBnum(API_HVC_B_FRAME_NUM_E eSize)
+void Encoder::setBnum(API_HVC_B_FRAME_NUM_E eSize)
 {
-    this->tApiHvcInitParam.eBFrameNum = eSize;
+    this->tApiInitParam.eBFrameNum = eSize;
 }
 
 
-API_HVC_B_FRAME_NUM_E HvcEncoder::getBnum()
+API_HVC_B_FRAME_NUM_E Encoder::getBnum()
 {
-    return this->tApiHvcInitParam.eBFrameNum;
+    return this->tApiInitParam.eBFrameNum;
 }
 
 
-void HvcEncoder::setFps(API_HVC_FPS_E eFps)
+void Encoder::setFps(API_HVC_FPS_E eFps)
 {
-    this->tApiHvcInitParam.eTargetFrameRate = eFps;
+    this->tApiInitParam.eTargetFrameRate = eFps;
 }
 
 
-API_HVC_FPS_E HvcEncoder::getFps()
+API_HVC_FPS_E Encoder::getFps()
 {
-    return this->tApiHvcInitParam.eTargetFrameRate;
+    return this->tApiInitParam.eTargetFrameRate;
 }
 
 
-void HvcEncoder::setBitrate(uint32_t u32Bitrate)
+void Encoder::setBitrate(uint32_t u32Bitrate)
 {
-    this->tApiHvcInitParam.u32Bitrate = u32Bitrate;
+    this->tApiInitParam.u32Bitrate = u32Bitrate;
 }
 
 
-uint32_t HvcEncoder::getBitrate()
+uint32_t Encoder::getBitrate()
 {
-    return this->tApiHvcInitParam.u32Bitrate;
+    return this->tApiInitParam.u32Bitrate;
 }
 
 
-void HvcEncoder::setLast()
+void Encoder::setLastES()
 {
-    this->bLast = true;
+    this->bLastES = true;
 }
 
 
-bool HvcEncoder::hasLast()
+bool Encoder::hasLastES()
 {
-    return this->bLast;
+    return this->bLastES;
 }
 
+
+void Encoder::setInputFd(int fd)
+{
+    this->input_fd = fd;
+}
+
+void Encoder::setImgSize(int sz)
+{
+    this->img_size = sz;
+}
 

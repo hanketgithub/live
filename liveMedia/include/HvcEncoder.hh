@@ -1,16 +1,17 @@
 #ifndef ___HVC_ENCODER_H___
 #define ___HVC_ENCODER_H___
 
-class HvcEncoder
+class Encoder
 {
 public:
-    HvcEncoder(API_HVC_BOARD_E eBoard, API_HVC_CHN_E eCh);
+    Encoder(API_HVC_BOARD_E eBoard, API_HVC_CHN_E eCh);
+    ~Encoder();
 
     bool init();
     bool start();
-    bool push(API_HVC_IMG_T *pImg);
-    API_HVC_RET pop(API_HVC_HEVC_CODED_PICT_T *pPic);
-    uint32_t read(uint8_t *dst, uint32_t maxSize);
+    API_HVC_RET push(API_VEGA330X_IMG_T *pImg);
+    API_HVC_RET pop(API_VEGA330X_HEVC_CODED_PICT_T *pPic);
+    uint32_t fillWithES(uint8_t *dst, uint32_t maxSize);
     bool stop();
     bool exit();
 
@@ -53,15 +54,21 @@ public:
     void setBitrate(uint32_t u32Bitrate);
     uint32_t getBitrate();
 
-    void setLast();
-    bool hasLast();
+    void setLastES();
+    bool hasLastES();
+
+    void setInputFd(int fd);    
+    void setImgSize(int sz);
     
 private:
-    bool bLast;
+    bool    bLastFramePushed;
+    bool    bLastES;
+    int     input_fd;
+    int     img_size;
     
     API_HVC_BOARD_E         eBoard;
     API_HVC_CHN_E           eCh;
-    API_HVC_INIT_PARAM_T    tApiHvcInitParam;
+    API_VEGA330X_INIT_PARAM_T   tApiInitParam;
 };
 
 #endif
