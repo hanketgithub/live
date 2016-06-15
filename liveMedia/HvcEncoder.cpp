@@ -9,6 +9,7 @@
 #include <fcntl.h>
 
 #include <iostream>
+#include <fstream>
 
 #include <libvega_encoder_api/VEGA330X_types.h>
 #include <libvega_encoder_api/VEGA330X_encoder.h>
@@ -97,7 +98,7 @@ uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
         memset(&img, 0, sizeof(img));
         vraw_data_buf_p = (uint8_t *) calloc(this->img_size, sizeof(uint8_t));
 
-        read(this->input_fd, vraw_data_buf_p, this->img_size);
+        this->_inputStream->read((char*) vraw_data_buf_p, this->img_size);
         frameCnt++;
         if (!this->bLastFramePushed)
         {
@@ -385,9 +386,9 @@ bool Encoder::hasLastES()
 }
 
 
-void Encoder::setInputFd(int fd)
+void Encoder::setInputStream(std::ifstream *is)
 {
-    this->input_fd = fd;
+    this->_inputStream = is;
 }
 
 void Encoder::setImgSize(int sz)

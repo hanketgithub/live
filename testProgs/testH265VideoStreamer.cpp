@@ -27,18 +27,18 @@
 
 #include <stdint.h>
 #include <string>
+#include <fstream>
 
 #include <libvega_encoder_api/VEGA330X_types.h>
 #include <libvega_encoder_api/VEGA330X_encoder.h>
-#include "../liveMedia/include/HvcEncoder.hh"
+#include <HvcEncoder.hh>
 
 #include <liveMedia.hh>
 #include <BasicUsageEnvironment.hh>
 #include <GroupsockHelper.hh>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 
+
+using namespace std;
 
 UsageEnvironment* env;
 char const* inputFileName = "test.yuv";
@@ -139,24 +139,18 @@ int main(int argc, char *argv[])
 
     if (!pstEncoder->init())
     {
-        goto main_ret;
+        return 0;
     }
 
     if (!pstEncoder->start())
     {
-        goto main_ret;
+        return 0;
     }
 
-	// Open image file for pushing.
-    int fd;
-    fd = open(inputFileName, O_RDONLY);
-    if (fd < 0)
-    {
-        perror(inputFileName);
+    ifstream inputFile;
 
-        goto main_ret;
-    }
-    pstEncoder->setInputFd(fd);
+    inputFile.open(inputFileName, ios::in | ios::binary);
+    pstEncoder->setInputStream(&inputFile);
     pstEncoder->setImgSize(wxh * 3 / 2);
 
     /* Push 9 images */
@@ -171,7 +165,7 @@ int main(int argc, char *argv[])
         img.pu8Addr = blank;
         img.u32Size = wxh * 3 / 2;
         img.bLastFrame = false;
-        HVC_ENC_PushImage(eBoard, eCh, &img);
+        VEGA330X_ENC_PushImage(eBoard, eCh, &img);
         free(blank);
     }
 
@@ -181,7 +175,6 @@ int main(int argc, char *argv[])
     
     env->taskScheduler().doEventLoop(); // does not return
 
-main_ret:
     return 0; // only to prevent compiler warning
 }
 

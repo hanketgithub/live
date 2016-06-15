@@ -57,13 +57,14 @@ public:
     void setLastES();
     bool hasLastES();
 
-    void setInputFd(int fd);    
+    void setInputStream(std::ifstream *);
     void setImgSize(int sz);
     
 private:
     bool    bLastFramePushed;
     bool    bLastES;
     int     input_fd;
+    std::ifstream *_inputStream;
     int     img_size;
     
     API_HVC_BOARD_E         eBoard;
