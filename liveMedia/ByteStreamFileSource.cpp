@@ -22,15 +22,16 @@
 #include <iostream>
 #include <string>
 
-#include "m31_hvc_api/HVC_types.h"
-#include "m31_hvc_api/HVC_encoder.h"
+
+#include <libvega_encoder_api/VEGA330X_types.h>
+#include <libvega_encoder_api/VEGA330X_encoder.h>
 #include "include/HvcEncoder.hh"
 
 #include "ByteStreamFileSource.hh"
 #include "InputFile.hh"
 #include "GroupsockHelper.hh"
 
-HvcEncoder *pstEncoder;
+Encoder *pstEncoder;
 
 
 ////////// ByteStreamFileSource //////////
@@ -173,7 +174,7 @@ void ByteStreamFileSource::doReadFromFile()
     if (fFidIsSeekable)
     {
         //fFrameSize = fread(fTo, 1, fMaxSize, fFid);
-        if (pstEncoder->hasLast())
+        if (pstEncoder->hasLastES())
         {
             fprintf(stderr, "Last ES already!\n");
             fFrameSize = 0;
@@ -184,7 +185,7 @@ void ByteStreamFileSource::doReadFromFile()
             exit(0);            
         }        
         
-        fFrameSize = pstEncoder->read(fTo, fMaxSize);
+        fFrameSize = pstEncoder->fillWithES(fTo, fMaxSize);
         
         fprintf(stderr, "send length=%d\n", fFrameSize);        
     }
