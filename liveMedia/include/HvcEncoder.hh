@@ -4,7 +4,7 @@
 class Encoder
 {
 public:
-    Encoder(API_HVC_BOARD_E eBoard, API_HVC_CHN_E eCh);
+    Encoder(API_VEGA330X_BOARD_E _eBoard, API_VEGA330X_CHN_E eCh);
     ~Encoder();
 
     bool init();
@@ -61,15 +61,16 @@ public:
     void setImgSize(int sz);
     
 private:
-    bool    bLastFramePushed;
-    bool    bLastES;
-    int     input_fd;
     std::ifstream *_inputStream;
-    int     img_size;
+
+    bool    _bLastFramePushed;
+    bool    _bLastES;
+    int     _imgSize;
+    int     _readCnt;
     
-    API_HVC_BOARD_E         eBoard;
-    API_HVC_CHN_E           eCh;
-    API_VEGA330X_INIT_PARAM_T   tApiInitParam;
+    API_VEGA330X_BOARD_E        _eBoard;
+    API_VEGA330X_CHN_E          _eCh;
+    API_VEGA330X_INIT_PARAM_T   _apiInitParam;
 };
 
 #endif

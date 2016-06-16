@@ -4,9 +4,6 @@
 #include <string.h>
 #include <stdlib.h>
 #include <unistd.h>
-#include <sys/types.h>
-#include <sys/stat.h>
-#include <fcntl.h>
 
 #include <iostream>
 #include <fstream>
@@ -15,23 +12,24 @@
 #include <libvega_encoder_api/VEGA330X_encoder.h>
 #include "include/HvcEncoder.hh"
 
+using namespace std;
 
-Encoder::Encoder(API_HVC_BOARD_E eBoard, API_HVC_CHN_E eCh)
+Encoder::Encoder(API_VEGA330X_BOARD_E eBoard, API_VEGA330X_CHN_E eCh)
 {
-    this->eBoard = eBoard;
-    this->eCh = eCh;
+    this->_eBoard = eBoard;
+    this->_eCh = eCh;
     
     VEGA330X_ENC_PrintVersion(eBoard);
 }
 
 bool Encoder::init()
 {
-    tApiInitParam.eDbgLevel = API_VEGA330X_DBG_LEVEL_3;
-    tApiInitParam.bDisableMonitor = true;
+    _apiInitParam.eDbgLevel = API_VEGA330X_DBG_LEVEL_3;
+    _apiInitParam.bDisableMonitor = true;
 
-    if (VEGA330X_ENC_Init(eBoard, eCh, &tApiInitParam) == API_HVC_RET_FAIL)
+    if (VEGA330X_ENC_Init(_eBoard, _eCh, &_apiInitParam) == API_HVC_RET_FAIL)
     {
-        fprintf(stderr, "%s line %d failed!\n", __FILE__, __LINE__);
+        cout << __FILE__ << " line " << __LINE__ << " failed!" << endl;
         return false;
     }
 
@@ -41,9 +39,9 @@ bool Encoder::init()
 
 bool Encoder::start()
 {
-	if (VEGA330X_ENC_Start(eBoard, eCh))
+	if (VEGA330X_ENC_Start(_eBoard, _eCh))
 	{
-		fprintf(stderr, "%s line %d failed!\n", __FILE__, __LINE__);
+        cout << __FILE__ << " line " << __LINE__ << " failed!" << endl;
         return false;
 	}
 
@@ -53,7 +51,7 @@ bool Encoder::start()
 
 API_HVC_RET Encoder::push(API_VEGA330X_IMG_T *pImg)
 {
-    return VEGA330X_ENC_PushImage(eBoard, eCh, pImg);
+    return VEGA330X_ENC_PushImage(_eBoard, _eCh, pImg);
 }
 
 
@@ -61,11 +59,11 @@ API_HVC_RET Encoder::pop(API_VEGA330X_HEVC_CODED_PICT_T *pPic)
 {
     API_HVC_RET eRet = API_HVC_RET_SUCCESS;
     
-    eRet = VEGA330X_ENC_PopES(eBoard, eCh, pPic);
+    eRet = VEGA330X_ENC_PopES(_eBoard, _eCh, pPic);
 
     if (pPic->bLastES)
     {
-        this->bLastES = true;
+        this->_bLastES = true;
     }
 
     return eRet;    
@@ -73,12 +71,11 @@ API_HVC_RET Encoder::pop(API_VEGA330X_HEVC_CODED_PICT_T *pPic)
 
 /** Major Encoder input/output function         */
 /** Do push-pop pair to generate ES             */
-/** Must have pushed 9 raw frame before head    */
+/** Must have pushed 9 raw frame beforehand     */
 uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
 {
     static uint8_t read_buf[1000000];
     static uint32_t leftBytes;
-    static int frameCnt = 0;
     uint32_t u32FrameSize = 0;
 
 
@@ -96,24 +93,36 @@ uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
         API_HVC_IMG_T img;
 
         memset(&img, 0, sizeof(img));
-        vraw_data_buf_p = (uint8_t *) calloc(this->img_size, sizeof(uint8_t));
 
-        this->_inputStream->read((char*) vraw_data_buf_p, this->img_size);
-        frameCnt++;
-        if (!this->bLastFramePushed)
+        
+        vraw_data_buf_p = (uint8_t *) calloc(this->_imgSize, sizeof(uint8_t));
+        this->_inputStream->read((char*) vraw_data_buf_p, this->_imgSize);
+
+        if (!this->_inputStream->eof())
+        {
+            this->_readCnt++;
+            cout << this->_readCnt << " read success!" << endl;
+            if (!this->_bLastFramePushed)
+            {
+                img.pu8Addr     = vraw_data_buf_p;
+                img.u32Size     = (uint32_t) this->_imgSize;
+                img.bLastFrame  = false;
+                img.eFormat     = API_VEGA330X_IMAGE_FORMAT_YUV420;
+
+                this->push(&img);
+            }
+        }
+        else if (!this->_bLastFramePushed)
         {
             img.pu8Addr     = vraw_data_buf_p;
-            img.u32Size     = (uint32_t) this->img_size;
-            img.bLastFrame  = (frameCnt == 200);
-            img.eFormat     = API_HVC_IMAGE_FORMAT_NV12;
-
+            img.u32Size     = (uint32_t) this->_imgSize;
+            img.bLastFrame  = true;
+            img.eFormat     = API_VEGA330X_IMAGE_FORMAT_YUV420;
+            
             this->push(&img);
-        }
-        if (img.bLastFrame)
-        {
-            this->bLastFramePushed = true;
-        }
 
+            this->_bLastFramePushed = true;
+        }
         free(vraw_data_buf_p);
         
         /* Do pop ES */
@@ -165,7 +174,7 @@ uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
 
 bool Encoder::stop()
 {
-    if (HVC_ENC_Stop(eBoard, eCh))
+    if (HVC_ENC_Stop(_eBoard, _eCh))
 	{
         return false;
 	}
@@ -176,7 +185,7 @@ bool Encoder::stop()
 
 bool Encoder::exit()
 {
-    if (HVC_ENC_Exit(eBoard, eCh))
+    if (HVC_ENC_Exit(_eBoard, _eCh))
 	{
         return false;
 	}
@@ -232,157 +241,157 @@ std::string *Encoder::toString(API_HVC_HEVC_CODED_PICT_T *pPic)
 
 void Encoder::setInputMode(API_HVC_INPUT_MODE_E eInputMode)
 {
-    this->tApiInitParam.eInputMode = eInputMode;
+    this->_apiInitParam.eInputMode = eInputMode;
 }
 
 
 API_HVC_INPUT_MODE_E Encoder::getInputMode()
 {
-    return this->tApiInitParam.eInputMode;
+    return this->_apiInitParam.eInputMode;
 }
 
 
 void Encoder::setProfile(API_HVC_HEVC_PROFILE_E eProfile)
 {
-    this->tApiInitParam.eProfile = eProfile;
+    this->_apiInitParam.eProfile = eProfile;
 }
 
 
 API_HVC_HEVC_PROFILE_E Encoder::getProfile()
 {
-    return this->tApiInitParam.eProfile;
+    return this->_apiInitParam.eProfile;
 }
 
 
 void Encoder::setLevel(API_HVC_HEVC_LEVEL_E eLevel)
 {
-    this->tApiInitParam.eLevel = eLevel;
+    this->_apiInitParam.eLevel = eLevel;
 }
 
 
 API_HVC_HEVC_LEVEL_E Encoder::getLevel()
 {
-    return this->tApiInitParam.eLevel;
+    return this->_apiInitParam.eLevel;
 }
 
 
 void Encoder::setTier(API_HVC_HEVC_TIER_E eTier)
 {
-    this->tApiInitParam.eTier = eTier;
+    this->_apiInitParam.eTier = eTier;
 }
 
 
 API_HVC_HEVC_TIER_E Encoder::getTier()
 {
-    return this->tApiInitParam.eTier;
+    return this->_apiInitParam.eTier;
 }
 
 
 void Encoder::setResolution(API_HVC_RESOLUTION_E eRes)
 {
-    this->tApiInitParam.eResolution = eRes;
+    this->_apiInitParam.eResolution = eRes;
 }
 
 
 API_HVC_RESOLUTION_E Encoder::getResolution()
 {
-    return this->tApiInitParam.eResolution;
+    return this->_apiInitParam.eResolution;
 }
 
 
 void Encoder::setChromaFormat(API_HVC_CHROMA_FORMAT_E eFmt)
 {
-    this->tApiInitParam.eChromaFmt = eFmt;
+    this->_apiInitParam.eChromaFmt = eFmt;
 }
 
 
 API_HVC_CHROMA_FORMAT_E Encoder::getChromaFormat()
 {
-    return this->tApiInitParam.eChromaFmt;
+    return this->_apiInitParam.eChromaFmt;
 }
 
 
 void Encoder::setBitDepth(API_HVC_BIT_DEPTH_E eBitDepth)
 {
-    this->tApiInitParam.eBitDepth = eBitDepth;
+    this->_apiInitParam.eBitDepth = eBitDepth;
 }
 
 
 API_HVC_BIT_DEPTH_E Encoder::getBitDepth()
 {
-    return this->tApiInitParam.eBitDepth;
+    return this->_apiInitParam.eBitDepth;
 }
 
 
 void Encoder::setGopType(API_HVC_GOP_TYPE_E eType)
 {
-    this->tApiInitParam.eGopType = eType;
+    this->_apiInitParam.eGopType = eType;
 }
 
 
 API_HVC_GOP_TYPE_E Encoder::getGopType()
 {
-    return this->tApiInitParam.eGopType;
+    return this->_apiInitParam.eGopType;
 }
 
 
 void Encoder::setGopSize(API_HVC_GOP_SIZE_E eSize)
 {
-    this->tApiInitParam.eGopSize = eSize;
+    this->_apiInitParam.eGopSize = eSize;
 }
 
 
 API_HVC_GOP_SIZE_E Encoder::getGopSize()
 {
-    return this->tApiInitParam.eGopSize;
+    return this->_apiInitParam.eGopSize;
 }
 
 
 void Encoder::setBnum(API_HVC_B_FRAME_NUM_E eSize)
 {
-    this->tApiInitParam.eBFrameNum = eSize;
+    this->_apiInitParam.eBFrameNum = eSize;
 }
 
 
 API_HVC_B_FRAME_NUM_E Encoder::getBnum()
 {
-    return this->tApiInitParam.eBFrameNum;
+    return this->_apiInitParam.eBFrameNum;
 }
 
 
 void Encoder::setFps(API_HVC_FPS_E eFps)
 {
-    this->tApiInitParam.eTargetFrameRate = eFps;
+    this->_apiInitParam.eTargetFrameRate = eFps;
 }
 
 
 API_HVC_FPS_E Encoder::getFps()
 {
-    return this->tApiInitParam.eTargetFrameRate;
+    return this->_apiInitParam.eTargetFrameRate;
 }
 
 
 void Encoder::setBitrate(uint32_t u32Bitrate)
 {
-    this->tApiInitParam.u32Bitrate = u32Bitrate;
+    this->_apiInitParam.u32Bitrate = u32Bitrate;
 }
 
 
 uint32_t Encoder::getBitrate()
 {
-    return this->tApiInitParam.u32Bitrate;
+    return this->_apiInitParam.u32Bitrate;
 }
 
 
 void Encoder::setLastES()
 {
-    this->bLastES = true;
+    this->_bLastES = true;
 }
 
 
 bool Encoder::hasLastES()
 {
-    return this->bLastES;
+    return this->_bLastES;
 }
 
 
@@ -393,6 +402,6 @@ void Encoder::setInputStream(std::ifstream *is)
 
 void Encoder::setImgSize(int sz)
 {
-    this->img_size = sz;
+    this->_imgSize = sz;
 }
 
