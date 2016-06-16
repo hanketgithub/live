@@ -18,8 +18,14 @@ Encoder::Encoder(API_VEGA330X_BOARD_E eBoard, API_VEGA330X_CHN_E eCh)
 {
     this->_eBoard = eBoard;
     this->_eCh = eCh;
+    this->_esBuf = (uint8_t *) calloc(1000000, 1);
     
     VEGA330X_ENC_PrintVersion(eBoard);
+}
+
+Encoder::~Encoder()
+{
+    free(this->_esBuf);
 }
 
 bool Encoder::init()
@@ -74,17 +80,15 @@ API_HVC_RET Encoder::pop(API_VEGA330X_HEVC_CODED_PICT_T *pPic)
 /** Must have pushed 9 raw frame beforehand     */
 uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
 {
-    static uint8_t read_buf[1000000];
-    static uint32_t leftBytes;
     uint32_t u32FrameSize = 0;
-
-
-    if (leftBytes != 0)
+    //static uint8_t _esBuf[1000000];
+    
+    if (_leftBytes != 0)
     {
-        fprintf(stderr, "Flush %d bytes in buffer!\n", leftBytes);
-        memcpy(dst, read_buf, leftBytes);
-        u32FrameSize = leftBytes;
-        leftBytes = 0;
+        fprintf(stderr, "Flush %d bytes in buffer!\n", _leftBytes);
+        memcpy(dst, _esBuf, _leftBytes);
+        u32FrameSize = _leftBytes;
+        _leftBytes = 0;
     }
     else
     {
@@ -136,7 +140,7 @@ uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
         uint8_t *p;
         uint32_t u32EsSize;
 
-        p           = read_buf;
+        p           = _esBuf;
         u32EsSize   = 0;
               
         for (j = 0; j < coded_pict.u32NalNum; j++)
@@ -147,23 +151,23 @@ uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
 
         std::cout << *this->toString(&coded_pict) << std::endl;
 
-        u32EsSize = p - read_buf;
+        u32EsSize = p - _esBuf;
 
         //fprintf(stderr, "\n EsSize=%d\n", u32EsSize);
 
         if (u32EsSize > maxSize)
         {
             // I. Copy fMaxSize to fTo
-            memcpy(dst, read_buf, maxSize);
+            memcpy(dst, _esBuf, maxSize);
 
-            // II. Copy left bytes to read_buf
-            leftBytes = u32EsSize - maxSize;
-            memmove(read_buf, &read_buf[maxSize], leftBytes);
+            // II. Copy left bytes to _esBuf
+            _leftBytes = u32EsSize - maxSize;
+            memmove(_esBuf, &_esBuf[maxSize], _leftBytes);
             u32FrameSize = maxSize;
         }
         else
         {
-            memcpy(dst, read_buf, u32EsSize);
+            memcpy(dst, _esBuf, u32EsSize);
             u32FrameSize = u32EsSize;
         }
     }    

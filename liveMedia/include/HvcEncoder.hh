@@ -63,11 +63,13 @@ public:
 private:
     std::ifstream *_inputStream;
 
-    bool    _bLastFramePushed;
-    bool    _bLastES;
-    int     _imgSize;
-    int     _readCnt;
-    
+    bool        _bLastFramePushed;
+    bool        _bLastES;
+    int         _imgSize;
+    int         _readCnt;
+    uint32_t    _leftBytes;
+    uint8_t     *_esBuf;
+
     API_VEGA330X_BOARD_E        _eBoard;
     API_VEGA330X_CHN_E          _eCh;
     API_VEGA330X_INIT_PARAM_T   _apiInitParam;
