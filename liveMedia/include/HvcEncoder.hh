@@ -4,7 +4,14 @@
 class Encoder
 {
 public:
-    Encoder(API_VEGA330X_BOARD_E _eBoard, API_VEGA330X_CHN_E eCh);
+    Encoder
+    (
+        std::ifstream& is,
+        int imgSize,
+        API_VEGA330X_BOARD_E eBoard,
+        API_VEGA330X_CHN_E eCh
+    );
+
     ~Encoder();
 
     bool init();
@@ -57,18 +64,17 @@ public:
     void setLastES();
     bool hasLastES();
 
-    void setInputStream(std::ifstream *);
     void setImgSize(int sz);
     
 private:
-    std::ifstream *_inputStream;
+    std::ifstream& _inputStream;
 
     bool        _bLastFramePushed;
     bool        _bLastES;
     int         _imgSize;
     int         _readCnt;
     uint32_t    _leftBytes;
-    uint8_t     *_esBuf;
+    uint8_t    *_esBuf;
 
     API_VEGA330X_BOARD_E        _eBoard;
     API_VEGA330X_CHN_E          _eCh;

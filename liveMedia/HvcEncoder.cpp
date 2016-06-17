@@ -14,7 +14,13 @@
 
 using namespace std;
 
-Encoder::Encoder(API_VEGA330X_BOARD_E eBoard, API_VEGA330X_CHN_E eCh)
+Encoder::Encoder
+(
+    ifstream& is,
+    int imgSize,
+    API_VEGA330X_BOARD_E eBoard,
+    API_VEGA330X_CHN_E eCh
+) : _inputStream(is), _imgSize(imgSize)
 {
     this->_eBoard = eBoard;
     this->_eCh = eCh;
@@ -97,12 +103,11 @@ uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
         API_HVC_IMG_T img;
 
         memset(&img, 0, sizeof(img));
-
-        
+   
         vraw_data_buf_p = (uint8_t *) calloc(this->_imgSize, sizeof(uint8_t));
-        this->_inputStream->read((char*) vraw_data_buf_p, this->_imgSize);
+        _inputStream.read((char*) vraw_data_buf_p, this->_imgSize);
 
-        if (!this->_inputStream->eof())
+        if (!_inputStream.eof())
         {
             this->_readCnt++;
             cout << this->_readCnt << " read success!" << endl;
@@ -396,16 +401,5 @@ void Encoder::setLastES()
 bool Encoder::hasLastES()
 {
     return this->_bLastES;
-}
-
-
-void Encoder::setInputStream(std::ifstream *is)
-{
-    this->_inputStream = is;
-}
-
-void Encoder::setImgSize(int sz)
-{
-    this->_imgSize = sz;
 }
 
