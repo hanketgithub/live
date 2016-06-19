@@ -28,6 +28,7 @@
 #include <stdint.h>
 #include <string>
 #include <fstream>
+#include <iostream>
 
 #include <libvega_encoder_api/VEGA330X_types.h>
 #include <libvega_encoder_api/VEGA330X_encoder.h>
@@ -41,7 +42,7 @@
 using namespace std;
 
 UsageEnvironment* env;
-char const* inputFileName = "test.yuv";
+char const * inputFileName;
 H265VideoStreamFramer* videoSource;
 RTPSink* videoSink;
 
@@ -51,6 +52,15 @@ void play(); // forward
 
 int main(int argc, char *argv[])
 {
+    if (argc < 4)
+    {
+        fprintf(stderr, "useage: %s [input_file] [width] [height]\n", argv[0]);
+        
+        return -1;
+    }
+
+    inputFileName = argv[1];
+
     // Begin by setting up our usage environment:
     TaskScheduler* scheduler = BasicTaskScheduler::createNew();
     env = BasicUsageEnvironment::createNew(*scheduler);
@@ -107,21 +117,26 @@ int main(int argc, char *argv[])
     *env << "Play this stream using the URL \"" << url << "\"\n";
     delete[] url;
 
-    if (argc < 3)
+    ifstream inputFile;
+
+    inputFile.open(inputFileName, ios::in | ios::binary);
+
+    if (!inputFile)
     {
-        fprintf(stderr, "useage: %s [width] [height]\n", argv[0]);
-        
+        fprintf(stderr, "Can not open %s!\n", inputFileName);
         return -1;
     }
 
-    int wxh = 0;
+    int width = atoi(argv[2]);
+    int height = atoi(argv[3]);
+    int wxh = width * height;
 
-    wxh = atoi(argv[1]) * atoi(argv[2]);
+    cout << "W=" << width << ", H=" << height << endl;
 
     API_HVC_BOARD_E eBoard = API_HVC_BOARD_1;
     API_HVC_CHN_E eCh = API_HVC_CHN_1;
 
-    pstEncoder = new Encoder(eBoard, eCh);
+    pstEncoder = new Encoder(inputFile, wxh * 3 / 2, eBoard, eCh);
 
     pstEncoder->setInputMode(API_HVC_INPUT_MODE_DATA);
     pstEncoder->setProfile(API_HVC_HEVC_MAIN_PROFILE);
@@ -146,12 +161,6 @@ int main(int argc, char *argv[])
     {
         return 0;
     }
-
-    ifstream inputFile;
-
-    inputFile.open(inputFileName, ios::in | ios::binary);
-    pstEncoder->setInputStream(&inputFile);
-    pstEncoder->setImgSize(wxh * 3 / 2);
 
     /* Push 9 images */
     for (int i = 0; i < 9; i++)

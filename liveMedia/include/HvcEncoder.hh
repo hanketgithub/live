@@ -63,8 +63,6 @@ public:
 
     void setLastES();
     bool hasLastES();
-
-    void setImgSize(int sz);
     
 private:
     std::ifstream& _inputStream;
