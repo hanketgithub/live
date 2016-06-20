@@ -36,7 +36,7 @@ Encoder::~Encoder()
 
 bool Encoder::init()
 {
-    _apiInitParam.eDbgLevel = API_VEGA330X_DBG_LEVEL_3;
+    _apiInitParam.eDbgLevel = API_VEGA330X_DBG_LEVEL_0;
     _apiInitParam.bDisableMonitor = true;
 
     if (VEGA330X_ENC_Init(_eBoard, _eCh, &_apiInitParam) == API_HVC_RET_FAIL)

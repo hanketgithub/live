@@ -38,6 +38,7 @@
 #include <BasicUsageEnvironment.hh>
 #include <GroupsockHelper.hh>
 
+#define OUT_PACKET_BUFFER_MAX_SIZE  10000000
 
 using namespace std;
 
@@ -49,6 +50,7 @@ RTPSink* videoSink;
 extern Encoder *pstEncoder;
 
 void play(); // forward
+API_VEGA330X_RESOLUTION_E getResolution(int width, int height);
 
 int main(int argc, char *argv[])
 {
@@ -85,7 +87,7 @@ int main(int argc, char *argv[])
     rtcpGroupsock.multicastSendOnly(); // we're a SSM source
     
     // Create a 'H265 Video RTP' sink from the RTP 'groupsock':
-    OutPacketBuffer::maxSize = 100000;
+    OutPacketBuffer::maxSize = OUT_PACKET_BUFFER_MAX_SIZE;
     videoSink = H265VideoRTPSink::createNew(*env, &rtpGroupsock, 96);
     
     // Create (and start) a 'RTCP instance' for this RTP sink:
@@ -142,7 +144,7 @@ int main(int argc, char *argv[])
     pstEncoder->setProfile(API_HVC_HEVC_MAIN_PROFILE);
     pstEncoder->setLevel(API_HVC_HEVC_LEVEL_40);
     pstEncoder->setTier(API_HVC_HEVC_MAIN_TIER);
-    pstEncoder->setResolution(API_HVC_RESOLUTION_720x576);
+    pstEncoder->setResolution(getResolution(width, height));
     pstEncoder->setChromaFormat(API_HVC_CHROMA_FORMAT_420);
     pstEncoder->setBitDepth(API_HVC_BIT_DEPTH_8);
     pstEncoder->setGopType(API_HVC_GOP_IB);
@@ -218,5 +220,16 @@ void play()
     // Finally, start playing:
     *env << "Beginning to read from file...\n";
     videoSink->startPlaying(*videoSource, afterPlaying, videoSink);
+}
+
+API_VEGA330X_RESOLUTION_E getResolution(int width, int height)
+{
+    API_VEGA330X_RESOLUTION_E eRet = API_VEGA330X_RESOLUTION_3840x2160;
+
+    if (width == 1920 && height == 1080) { eRet = API_VEGA330X_RESOLUTION_1920x1080; }
+    else if (width == 1280 && height == 720) { eRet = API_VEGA330X_RESOLUTION_1280x720; }
+    else if (width == 720 && height == 576) { eRet = API_VEGA330X_RESOLUTION_720x576; }
+
+    return eRet;
 }
 
