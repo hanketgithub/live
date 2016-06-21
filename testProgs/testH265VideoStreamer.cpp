@@ -55,18 +55,58 @@ API_VEGA330X_RESOLUTION_E getResolution(int width, int height);
 
 int main(int argc, char *argv[])
 {
+    bool loop = false;
     API_HVC_BOARD_E eBoard = API_HVC_BOARD_1;
     API_HVC_CHN_E eCh = API_HVC_CHN_1;
-
+    int width = 0;
+    int height = 0;
+    char buf[20];
+    
     if (argc < 5)
     {
-        fprintf(stderr, "useage: %s [input_file] [width] [height] [ch]\n", argv[0]);
+        fprintf(stderr, "useage: %s -i [input_file] -w [width] -h [height] -c [ch] [-l]\n", argv[0]);
         
         return -1;
     }
 
-    inputFileName = argv[1];
-    eCh = (API_HVC_CHN_E) atoi(argv[4]);
+    int opt;
+    while ((opt = getopt(argc, argv, "i:w:h:c:l")) != -1)
+    {
+        switch (opt)
+        {
+            case 'i':
+            {
+                strcpy(buf, optarg);
+                inputFileName = buf;
+                break;
+            }
+            case 'w':
+            {
+                width = atoi(optarg);
+                break;
+            }
+            case 'h':
+            {
+                height = atoi(optarg);
+                break;
+            }
+            case 'c':
+            {
+                eCh = (API_HVC_CHN_E) atoi(optarg);
+                break;
+            }
+            case 'l':
+            {
+                loop = true;
+                break;
+            }
+            default:
+            {
+                printf("no %d\n", opt);
+                break;
+            }
+        }
+    }
 
     // Begin by setting up our usage environment:
     TaskScheduler* scheduler = BasicTaskScheduler::createNew();
@@ -135,13 +175,11 @@ int main(int argc, char *argv[])
         return -1;
     }
 
-    int width = atoi(argv[2]);
-    int height = atoi(argv[3]);
     int wxh = width * height;
 
     cout << "W=" << width << ", H=" << height << endl;
 
-    pstEncoder = new Encoder(inputFile, wxh * 3 / 2, eBoard, eCh);
+    pstEncoder = new Encoder(inputFile, wxh * 3 / 2, eBoard, eCh, loop);
 
     pstEncoder->setInputMode(API_HVC_INPUT_MODE_DATA);
     pstEncoder->setProfile(API_HVC_HEVC_MAIN_PROFILE);

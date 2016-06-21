@@ -9,7 +9,8 @@ public:
         std::ifstream& is,
         int imgSize,
         API_VEGA330X_BOARD_E eBoard,
-        API_VEGA330X_CHN_E eCh
+        API_VEGA330X_CHN_E eCh,
+        bool loop
     );
 
     ~Encoder();
@@ -66,6 +67,7 @@ public:
     
 private:
     std::ifstream& _inputStream;
+    bool        _bLoop;
 
     bool        _bLastFramePushed;
     bool        _bLastES;

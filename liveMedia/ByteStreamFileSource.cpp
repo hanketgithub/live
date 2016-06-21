@@ -173,7 +173,7 @@ void ByteStreamFileSource::doReadFromFile()
 
     if (fFidIsSeekable)
     {
-        //fFrameSize = fread(fTo, 1, fMaxSize, fFid);
+#if 1
         if (pstEncoder->hasLastES())
         {
             fprintf(stderr, "Last ES already!\n");
@@ -186,8 +186,10 @@ void ByteStreamFileSource::doReadFromFile()
         }        
         
         fFrameSize = pstEncoder->fillWithES(fTo, fMaxSize);
-        
-        //fprintf(stderr, "send length=%d\n", fFrameSize);        
+        //fprintf(stderr, "send length=%d\n", fFrameSize);
+#else
+        fFrameSize = fread(fTo, 1, fMaxSize, fFid);
+#endif
     }
     else
     {

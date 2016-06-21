@@ -19,12 +19,14 @@ Encoder::Encoder
     ifstream& is,
     int imgSize,
     API_VEGA330X_BOARD_E eBoard,
-    API_VEGA330X_CHN_E eCh
+    API_VEGA330X_CHN_E eCh,
+    bool loop
 ) : _inputStream(is), _imgSize(imgSize)
 {
     this->_eBoard = eBoard;
     this->_eCh = eCh;
     this->_esBuf = (uint8_t *) calloc(1000000, 1);
+    this->_bLoop = loop;
     
     VEGA330X_ENC_PrintVersion(eBoard);
 }
@@ -118,6 +120,12 @@ uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
    
         vraw_data_buf_p = (uint8_t *) calloc(this->_imgSize, sizeof(uint8_t));
         _inputStream.read((char*) vraw_data_buf_p, this->_imgSize);
+
+        if (_inputStream.eof() && _bLoop)
+        {
+            _inputStream.clear();
+            _inputStream.seekg(0, ios::beg);
+        }
 
         if (!_inputStream.eof())
         {
