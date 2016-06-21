@@ -187,7 +187,7 @@ void ByteStreamFileSource::doReadFromFile()
         
         fFrameSize = pstEncoder->fillWithES(fTo, fMaxSize);
         
-        fprintf(stderr, "send length=%d\n", fFrameSize);        
+        //fprintf(stderr, "send length=%d\n", fFrameSize);        
     }
     else
     {

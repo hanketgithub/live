@@ -39,6 +39,7 @@
 #include <GroupsockHelper.hh>
 
 #define OUT_PACKET_BUFFER_MAX_SIZE  10000000
+#define PORT_BASE   8554
 
 using namespace std;
 
@@ -54,14 +55,18 @@ API_VEGA330X_RESOLUTION_E getResolution(int width, int height);
 
 int main(int argc, char *argv[])
 {
-    if (argc < 4)
+    API_HVC_BOARD_E eBoard = API_HVC_BOARD_1;
+    API_HVC_CHN_E eCh = API_HVC_CHN_1;
+
+    if (argc < 5)
     {
-        fprintf(stderr, "useage: %s [input_file] [width] [height]\n", argv[0]);
+        fprintf(stderr, "useage: %s [input_file] [width] [height] [ch]\n", argv[0]);
         
         return -1;
     }
 
     inputFileName = argv[1];
+    eCh = (API_HVC_CHN_E) atoi(argv[4]);
 
     // Begin by setting up our usage environment:
     TaskScheduler* scheduler = BasicTaskScheduler::createNew();
@@ -103,13 +108,15 @@ int main(int argc, char *argv[])
                               True /* we're a SSM source */);
     // Note: This starts RTCP running automatically
     
-    RTSPServer* rtspServer = RTSPServer::createNew(*env, 8554);
+    RTSPServer* rtspServer = RTSPServer::createNew(*env, PORT_BASE + eCh);
     if (rtspServer == NULL) {
         *env << "Failed to create RTSP server: " << env->getResultMsg() << "\n";
         exit(1);
     }
+    char streamName[10];
+    sprintf(streamName, "vega%d", eCh);
     ServerMediaSession* sms
-    = ServerMediaSession::createNew(*env, "testStream", inputFileName,
+    = ServerMediaSession::createNew(*env, streamName, inputFileName,
                                     "Session streamed by \"testH265VideoStreamer\"",
                                     True /*SSM*/);
     sms->addSubsession(PassiveServerMediaSubsession::createNew(*videoSink, rtcp));
@@ -122,7 +129,6 @@ int main(int argc, char *argv[])
     ifstream inputFile;
 
     inputFile.open(inputFileName, ios::in | ios::binary);
-
     if (!inputFile)
     {
         fprintf(stderr, "Can not open %s!\n", inputFileName);
@@ -134,9 +140,6 @@ int main(int argc, char *argv[])
     int wxh = width * height;
 
     cout << "W=" << width << ", H=" << height << endl;
-
-    API_HVC_BOARD_E eBoard = API_HVC_BOARD_1;
-    API_HVC_CHN_E eCh = API_HVC_CHN_1;
 
     pstEncoder = new Encoder(inputFile, wxh * 3 / 2, eBoard, eCh);
 
@@ -229,6 +232,7 @@ API_VEGA330X_RESOLUTION_E getResolution(int width, int height)
     if (width == 1920 && height == 1080) { eRet = API_VEGA330X_RESOLUTION_1920x1080; }
     else if (width == 1280 && height == 720) { eRet = API_VEGA330X_RESOLUTION_1280x720; }
     else if (width == 720 && height == 576) { eRet = API_VEGA330X_RESOLUTION_720x576; }
+    else if (width == 720 && height == 480) { eRet = API_VEGA330X_RESOLUTION_720x480; }
 
     return eRet;
 }

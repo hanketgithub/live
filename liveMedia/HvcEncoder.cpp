@@ -36,8 +36,21 @@ Encoder::~Encoder()
 
 bool Encoder::init()
 {
-    _apiInitParam.eDbgLevel = API_VEGA330X_DBG_LEVEL_0;
-    _apiInitParam.bDisableMonitor = true;
+    VEGA330X_ENC_MakeInitParam
+    (
+        &_apiInitParam,
+        _apiInitParam.eProfile,
+        _apiInitParam.eLevel,
+        _apiInitParam.eTier,
+        _apiInitParam.eResolution,
+        _apiInitParam.eChromaFmt,
+        _apiInitParam.eBitDepth,
+        _apiInitParam.eTargetFrameRate,
+        _apiInitParam.u32Bitrate,
+        270000
+    );
+    //_apiInitParam.eDbgLevel = API_VEGA330X_DBG_LEVEL_0;
+    //_apiInitParam.bDisableMonitor = true;
 
     if (VEGA330X_ENC_Init(_eBoard, _eCh, &_apiInitParam) == API_HVC_RET_FAIL)
     {
@@ -87,7 +100,6 @@ API_HVC_RET Encoder::pop(API_VEGA330X_HEVC_CODED_PICT_T *pPic)
 uint32_t Encoder::fillWithES(uint8_t *dst, uint32_t maxSize)
 {
     uint32_t u32FrameSize = 0;
-    //static uint8_t _esBuf[1000000];
     
     if (_leftBytes != 0)
     {
