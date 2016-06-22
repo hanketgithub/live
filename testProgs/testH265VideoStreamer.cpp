@@ -60,7 +60,7 @@ int main(int argc, char *argv[])
     API_HVC_CHN_E eCh = API_HVC_CHN_1;
     int width = 0;
     int height = 0;
-    char buf[20];
+    string s;
     
     if (argc < 5)
     {
@@ -76,8 +76,8 @@ int main(int argc, char *argv[])
         {
             case 'i':
             {
-                strcpy(buf, optarg);
-                inputFileName = buf;
+                s = optarg;
+                inputFileName = s.c_str();
                 break;
             }
             case 'w':
